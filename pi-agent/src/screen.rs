@@ -26,14 +26,17 @@ pub struct ScreenLayout {
 impl ScreenLayout {
     pub fn from_raw(raw: Vec<crate::serial::protocol::Screen>) -> Self {
         // Sort by x position left to right
-        let mut screens: Vec<Screen> = raw.into_iter().map(|s| Screen {
-            id: s.id,
-            x: s.x,
-            y: s.y,
-            w: s.w,
-            h: s.h,
-            role: ScreenRole::Center, // temp
-        }).collect();
+        let mut screens: Vec<Screen> = raw
+            .into_iter()
+            .map(|s| Screen {
+                id: s.id,
+                x: s.x,
+                y: s.y,
+                w: s.w,
+                h: s.h,
+                role: ScreenRole::Center, // temp
+            })
+            .collect();
 
         screens.sort_by_key(|s| s.x);
 
@@ -65,17 +68,26 @@ impl ScreenLayout {
     }
 
     pub fn which_screen(&self, x: i32, y: i32) -> Option<&Screen> {
-        self.screens.iter().find(|s| {
-            x >= s.x && x < s.x + s.w as i32 &&
-            y >= s.y && y < s.y + s.h as i32
-        })
+        self.screens
+            .iter()
+            .find(|s| x >= s.x && x < s.x + s.w as i32 && y >= s.y && y < s.y + s.h as i32)
     }
 
     pub fn total_bounds(&self) -> (i32, i32, i32, i32) {
         let min_x = self.screens.iter().map(|s| s.x).min().unwrap_or(0);
         let min_y = self.screens.iter().map(|s| s.y).min().unwrap_or(0);
-        let max_x = self.screens.iter().map(|s| s.x + s.w as i32).max().unwrap_or(0);
-        let max_y = self.screens.iter().map(|s| s.y + s.h as i32).max().unwrap_or(0);
+        let max_x = self
+            .screens
+            .iter()
+            .map(|s| s.x + s.w as i32)
+            .max()
+            .unwrap_or(0);
+        let max_y = self
+            .screens
+            .iter()
+            .map(|s| s.y + s.h as i32)
+            .max()
+            .unwrap_or(0);
         (min_x, min_y, max_x, max_y)
     }
 
@@ -93,6 +105,12 @@ impl ScreenLayout {
             );
         }
         let (min_x, _, max_x, max_y) = self.total_bounds();
-        println!("  Total: {}x{} (x: {} to {})", max_x - min_x, max_y, min_x, max_x);
+        println!(
+            "  Total: {}x{} (x: {} to {})",
+            max_x - min_x,
+            max_y,
+            min_x,
+            max_x
+        );
     }
 }

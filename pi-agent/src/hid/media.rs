@@ -6,16 +6,16 @@ use crate::config::HidConfig;
 const TAP_DELAY_MS: u64 = 50;
 
 // Consumer key codes
-pub const MEDIA_PLAY_PAUSE:    u16 = 0x00CD;
-pub const MEDIA_NEXT:          u16 = 0x00B5;
-pub const MEDIA_PREV:          u16 = 0x00B6;
-pub const MEDIA_STOP:          u16 = 0x00B7;
-pub const MEDIA_VOLUME_UP:     u16 = 0x00E9;
-pub const MEDIA_VOLUME_DOWN:   u16 = 0x00EA;
-pub const MEDIA_MUTE:          u16 = 0x00E2;
+pub const MEDIA_PLAY_PAUSE: u16 = 0x00CD;
+pub const MEDIA_NEXT: u16 = 0x00B5;
+pub const MEDIA_PREV: u16 = 0x00B6;
+pub const MEDIA_STOP: u16 = 0x00B7;
+pub const MEDIA_VOLUME_UP: u16 = 0x00E9;
+pub const MEDIA_VOLUME_DOWN: u16 = 0x00EA;
+pub const MEDIA_MUTE: u16 = 0x00E2;
 pub const MEDIA_BRIGHTNESS_UP: u16 = 0x006F;
 pub const MEDIA_BRIGHTNESS_DN: u16 = 0x0070;
-pub const MEDIA_SCREENSHOT:    u16 = 0x0065;
+pub const MEDIA_SCREENSHOT: u16 = 0x0065;
 
 pub struct Media {
     device: std::fs::File,
@@ -23,18 +23,13 @@ pub struct Media {
 
 impl Media {
     pub fn new(config: &HidConfig) -> Result<Self, std::io::Error> {
-        let device = OpenOptions::new()
-            .write(true)
-            .open(&config.media)?;
+        let device = OpenOptions::new().write(true).open(&config.media)?;
         Ok(Media { device })
     }
 
     fn send(&mut self, key: u16) -> std::io::Result<()> {
         // 2 byte report — little endian
-        let report = [
-            (key & 0xFF) as u8,
-            ((key >> 8) & 0xFF) as u8,
-        ];
+        let report = [(key & 0xFF) as u8, ((key >> 8) & 0xFF) as u8];
         self.device.write_all(&report)?;
         self.device.flush()
     }

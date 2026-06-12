@@ -36,52 +36,52 @@ pub const KEY_8: u8 = 0x25;
 pub const KEY_9: u8 = 0x26;
 pub const KEY_0: u8 = 0x27;
 
-pub const KEY_ENTER:     u8 = 0x28;
-pub const KEY_ESC:       u8 = 0x29;
+pub const KEY_ENTER: u8 = 0x28;
+pub const KEY_ESC: u8 = 0x29;
 pub const KEY_BACKSPACE: u8 = 0x2A;
-pub const KEY_TAB:       u8 = 0x2B;
-pub const KEY_SPACE:     u8 = 0x2C;
-pub const KEY_MINUS:     u8 = 0x2D;
-pub const KEY_EQUAL:     u8 = 0x2E;
-pub const KEY_LBRACKET:  u8 = 0x2F;
-pub const KEY_RBRACKET:  u8 = 0x30;
+pub const KEY_TAB: u8 = 0x2B;
+pub const KEY_SPACE: u8 = 0x2C;
+pub const KEY_MINUS: u8 = 0x2D;
+pub const KEY_EQUAL: u8 = 0x2E;
+pub const KEY_LBRACKET: u8 = 0x2F;
+pub const KEY_RBRACKET: u8 = 0x30;
 pub const KEY_BACKSLASH: u8 = 0x31;
 pub const KEY_SEMICOLON: u8 = 0x33;
-pub const KEY_QUOTE:     u8 = 0x34;
-pub const KEY_GRAVE:     u8 = 0x35;
-pub const KEY_COMMA:     u8 = 0x36;
-pub const KEY_DOT:       u8 = 0x37;
-pub const KEY_SLASH:     u8 = 0x38;
+pub const KEY_QUOTE: u8 = 0x34;
+pub const KEY_GRAVE: u8 = 0x35;
+pub const KEY_COMMA: u8 = 0x36;
+pub const KEY_DOT: u8 = 0x37;
+pub const KEY_SLASH: u8 = 0x38;
 
-pub const KEY_F1:  u8 = 0x3A;
-pub const KEY_F2:  u8 = 0x3B;
-pub const KEY_F3:  u8 = 0x3C;
-pub const KEY_F4:  u8 = 0x3D;
-pub const KEY_F5:  u8 = 0x3E;
-pub const KEY_F6:  u8 = 0x3F;
-pub const KEY_F7:  u8 = 0x40;
-pub const KEY_F8:  u8 = 0x41;
-pub const KEY_F9:  u8 = 0x42;
+pub const KEY_F1: u8 = 0x3A;
+pub const KEY_F2: u8 = 0x3B;
+pub const KEY_F3: u8 = 0x3C;
+pub const KEY_F4: u8 = 0x3D;
+pub const KEY_F5: u8 = 0x3E;
+pub const KEY_F6: u8 = 0x3F;
+pub const KEY_F7: u8 = 0x40;
+pub const KEY_F8: u8 = 0x41;
+pub const KEY_F9: u8 = 0x42;
 pub const KEY_F10: u8 = 0x43;
 pub const KEY_F11: u8 = 0x44;
 pub const KEY_F12: u8 = 0x45;
 
-pub const KEY_DELETE:   u8 = 0x4C;
-pub const KEY_HOME:     u8 = 0x4A;
-pub const KEY_END:      u8 = 0x4D;
-pub const KEY_PAGEUP:   u8 = 0x4B;
+pub const KEY_DELETE: u8 = 0x4C;
+pub const KEY_HOME: u8 = 0x4A;
+pub const KEY_END: u8 = 0x4D;
+pub const KEY_PAGEUP: u8 = 0x4B;
 pub const KEY_PAGEDOWN: u8 = 0x4E;
-pub const KEY_RIGHT:    u8 = 0x4F;
-pub const KEY_LEFT:     u8 = 0x50;
-pub const KEY_DOWN:     u8 = 0x51;
-pub const KEY_UP:       u8 = 0x52;
+pub const KEY_RIGHT: u8 = 0x4F;
+pub const KEY_LEFT: u8 = 0x50;
+pub const KEY_DOWN: u8 = 0x51;
+pub const KEY_UP: u8 = 0x52;
 pub const KEY_CAPSLOCK: u8 = 0x39;
 
-pub const MOD_NONE:  u8 = 0x00;
-pub const MOD_CTRL:  u8 = 0x01;
+pub const MOD_NONE: u8 = 0x00;
+pub const MOD_CTRL: u8 = 0x01;
 pub const MOD_SHIFT: u8 = 0x02;
-pub const MOD_ALT:   u8 = 0x04;
-pub const MOD_CMD:   u8 = 0x08;
+pub const MOD_ALT: u8 = 0x04;
+pub const MOD_CMD: u8 = 0x08;
 
 pub fn char_to_hid(ch: char) -> Option<(u8, u8)> {
     match ch {
@@ -107,74 +107,74 @@ pub fn char_to_hid(ch: char) -> Option<(u8, u8)> {
         '*' => Some((KEY_8, MOD_SHIFT)),
         '(' => Some((KEY_9, MOD_SHIFT)),
         ')' => Some((KEY_0, MOD_SHIFT)),
-        '-' => Some((KEY_MINUS,     MOD_NONE)),
-        '_' => Some((KEY_MINUS,     MOD_SHIFT)),
-        '=' => Some((KEY_EQUAL,     MOD_NONE)),
-        '+' => Some((KEY_EQUAL,     MOD_SHIFT)),
-        '[' => Some((KEY_LBRACKET,  MOD_NONE)),
-        '{' => Some((KEY_LBRACKET,  MOD_SHIFT)),
-        ']' => Some((KEY_RBRACKET,  MOD_NONE)),
-        '}' => Some((KEY_RBRACKET,  MOD_SHIFT)),
+        '-' => Some((KEY_MINUS, MOD_NONE)),
+        '_' => Some((KEY_MINUS, MOD_SHIFT)),
+        '=' => Some((KEY_EQUAL, MOD_NONE)),
+        '+' => Some((KEY_EQUAL, MOD_SHIFT)),
+        '[' => Some((KEY_LBRACKET, MOD_NONE)),
+        '{' => Some((KEY_LBRACKET, MOD_SHIFT)),
+        ']' => Some((KEY_RBRACKET, MOD_NONE)),
+        '}' => Some((KEY_RBRACKET, MOD_SHIFT)),
         '\\' => Some((KEY_BACKSLASH, MOD_NONE)),
         '|' => Some((KEY_BACKSLASH, MOD_SHIFT)),
         ';' => Some((KEY_SEMICOLON, MOD_NONE)),
         ':' => Some((KEY_SEMICOLON, MOD_SHIFT)),
-        '\'' => Some((KEY_QUOTE,    MOD_NONE)),
-        '"' => Some((KEY_QUOTE,     MOD_SHIFT)),
-        '`' => Some((KEY_GRAVE,     MOD_NONE)),
-        '~' => Some((KEY_GRAVE,     MOD_SHIFT)),
-        ',' => Some((KEY_COMMA,     MOD_NONE)),
-        '<' => Some((KEY_COMMA,     MOD_SHIFT)),
-        '.' => Some((KEY_DOT,       MOD_NONE)),
-        '>' => Some((KEY_DOT,       MOD_SHIFT)),
-        '/' => Some((KEY_SLASH,     MOD_NONE)),
-        '?' => Some((KEY_SLASH,     MOD_SHIFT)),
-        ' ' => Some((KEY_SPACE,     MOD_NONE)),
-        '\n' => Some((KEY_ENTER,    MOD_NONE)),
-        '\t' => Some((KEY_TAB,      MOD_NONE)),
+        '\'' => Some((KEY_QUOTE, MOD_NONE)),
+        '"' => Some((KEY_QUOTE, MOD_SHIFT)),
+        '`' => Some((KEY_GRAVE, MOD_NONE)),
+        '~' => Some((KEY_GRAVE, MOD_SHIFT)),
+        ',' => Some((KEY_COMMA, MOD_NONE)),
+        '<' => Some((KEY_COMMA, MOD_SHIFT)),
+        '.' => Some((KEY_DOT, MOD_NONE)),
+        '>' => Some((KEY_DOT, MOD_SHIFT)),
+        '/' => Some((KEY_SLASH, MOD_NONE)),
+        '?' => Some((KEY_SLASH, MOD_SHIFT)),
+        ' ' => Some((KEY_SPACE, MOD_NONE)),
+        '\n' => Some((KEY_ENTER, MOD_NONE)),
+        '\t' => Some((KEY_TAB, MOD_NONE)),
         _ => None,
     }
 }
 
 pub fn name_to_hid(name: &str) -> Option<(u8, u8)> {
     match name.to_uppercase().as_str() {
-        "ENTER"     => Some((KEY_ENTER,     MOD_NONE)),
-        "ESC"       => Some((KEY_ESC,       MOD_NONE)),
+        "ENTER" => Some((KEY_ENTER, MOD_NONE)),
+        "ESC" => Some((KEY_ESC, MOD_NONE)),
         "BACKSPACE" => Some((KEY_BACKSPACE, MOD_NONE)),
-        "TAB"       => Some((KEY_TAB,       MOD_NONE)),
-        "SPACE"     => Some((KEY_SPACE,     MOD_NONE)),
-        "LEFT"      => Some((KEY_LEFT,      MOD_NONE)),
-        "RIGHT"     => Some((KEY_RIGHT,     MOD_NONE)),
-        "UP"        => Some((KEY_UP,        MOD_NONE)),
-        "DOWN"      => Some((KEY_DOWN,      MOD_NONE)),
-        "DELETE"    => Some((KEY_DELETE,    MOD_NONE)),
-        "HOME"      => Some((KEY_HOME,      MOD_NONE)),
-        "END"       => Some((KEY_END,       MOD_NONE)),
-        "PAGEUP"    => Some((KEY_PAGEUP,    MOD_NONE)),
-        "PAGEDOWN"  => Some((KEY_PAGEDOWN,  MOD_NONE)),
-        "CAPSLOCK"  => Some((KEY_CAPSLOCK,  MOD_NONE)),
-        "F1"        => Some((KEY_F1,        MOD_NONE)),
-        "F2"        => Some((KEY_F2,        MOD_NONE)),
-        "F3"        => Some((KEY_F3,        MOD_NONE)),
-        "F4"        => Some((KEY_F4,        MOD_NONE)),
-        "F5"        => Some((KEY_F5,        MOD_NONE)),
-        "F6"        => Some((KEY_F6,        MOD_NONE)),
-        "F7"        => Some((KEY_F7,        MOD_NONE)),
-        "F8"        => Some((KEY_F8,        MOD_NONE)),
-        "F9"        => Some((KEY_F9,        MOD_NONE)),
-        "F10"       => Some((KEY_F10,       MOD_NONE)),
-        "F11"       => Some((KEY_F11,       MOD_NONE)),
-        "F12"       => Some((KEY_F12,       MOD_NONE)),
-        _           => None,
+        "TAB" => Some((KEY_TAB, MOD_NONE)),
+        "SPACE" => Some((KEY_SPACE, MOD_NONE)),
+        "LEFT" => Some((KEY_LEFT, MOD_NONE)),
+        "RIGHT" => Some((KEY_RIGHT, MOD_NONE)),
+        "UP" => Some((KEY_UP, MOD_NONE)),
+        "DOWN" => Some((KEY_DOWN, MOD_NONE)),
+        "DELETE" => Some((KEY_DELETE, MOD_NONE)),
+        "HOME" => Some((KEY_HOME, MOD_NONE)),
+        "END" => Some((KEY_END, MOD_NONE)),
+        "PAGEUP" => Some((KEY_PAGEUP, MOD_NONE)),
+        "PAGEDOWN" => Some((KEY_PAGEDOWN, MOD_NONE)),
+        "CAPSLOCK" => Some((KEY_CAPSLOCK, MOD_NONE)),
+        "F1" => Some((KEY_F1, MOD_NONE)),
+        "F2" => Some((KEY_F2, MOD_NONE)),
+        "F3" => Some((KEY_F3, MOD_NONE)),
+        "F4" => Some((KEY_F4, MOD_NONE)),
+        "F5" => Some((KEY_F5, MOD_NONE)),
+        "F6" => Some((KEY_F6, MOD_NONE)),
+        "F7" => Some((KEY_F7, MOD_NONE)),
+        "F8" => Some((KEY_F8, MOD_NONE)),
+        "F9" => Some((KEY_F9, MOD_NONE)),
+        "F10" => Some((KEY_F10, MOD_NONE)),
+        "F11" => Some((KEY_F11, MOD_NONE)),
+        "F12" => Some((KEY_F12, MOD_NONE)),
+        _ => None,
     }
 }
 
 pub fn modifier_from_name(name: &str) -> Option<u8> {
     match name.to_uppercase().as_str() {
-        "CTRL"  => Some(MOD_CTRL),
+        "CTRL" => Some(MOD_CTRL),
         "SHIFT" => Some(MOD_SHIFT),
-        "ALT"   => Some(MOD_ALT),
-        "CMD"   => Some(MOD_CMD),
-        _       => None,
+        "ALT" => Some(MOD_ALT),
+        "CMD" => Some(MOD_CMD),
+        _ => None,
     }
 }

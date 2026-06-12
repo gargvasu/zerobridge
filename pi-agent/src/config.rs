@@ -1,41 +1,41 @@
-use std::path::PathBuf;
 use serde::Deserialize;
+use std::path::PathBuf;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
-    pub ssh:    SshConfig,
-    pub hosts:  HostsConfig,
+    pub ssh: SshConfig,
+    pub hosts: HostsConfig,
     pub serial: SerialConfig,
-    pub hid:    HidConfig,
+    pub hid: HidConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct SshConfig {
-    pub user:       String,
-    pub key:        String,
-    pub port:       u16,
+    pub user: String,
+    pub key: String,
+    pub port: u16,
     pub timeout_ms: u64,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct HostsConfig {
-    pub usb:  String,
+    pub usb: String,
     pub wifi: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct SerialConfig {
-    pub device:            String,
-    pub timeout_ms:        u64,
+    pub device: String,
+    pub timeout_ms: u64,
     pub cursor_timeout_ms: u64,
-    pub max_retries:       u32,
+    pub max_retries: u32,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct HidConfig {
     pub keyboard: String,
-    pub mouse:    String,
-    pub media:    String,
+    pub mouse: String,
+    pub media: String,
 }
 
 fn config_paths() -> Vec<PathBuf> {
@@ -54,10 +54,9 @@ impl Config {
         for path in config_paths() {
             if path.exists() {
                 eprintln!("[config] Loading from {}", path.display());
-                let content = std::fs::read_to_string(&path)
-                    .map_err(|e| format!("Read failed: {}", e))?;
-                return toml::from_str(&content)
-                    .map_err(|e| format!("Parse failed: {}", e));
+                let content =
+                    std::fs::read_to_string(&path).map_err(|e| format!("Read failed: {}", e))?;
+                return toml::from_str(&content).map_err(|e| format!("Parse failed: {}", e));
             }
         }
         eprintln!("[config] No config file found — using defaults");

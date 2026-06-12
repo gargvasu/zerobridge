@@ -1,30 +1,29 @@
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 
-use crate::serial::protocol::{Request, Response};
 use crate::bridge::serial_queue::SerialQueue;
 use crate::bridge::ssh_pool::SshPool;
+use crate::config::Config;
+use crate::serial::protocol::{Request, Response};
 
-const SSH_USB_HOST:  &str = "169.254.206.1";
-const SSH_WIFI_HOST: &str = "192.168.0.167";
 const HEALTH_INTERVAL_SECS: u64 = 30;
 
 pub struct MacBridge {
-    serial:    Arc<SerialQueue>,
-    ssh_usb:   Arc<SshPool>,
-    ssh_wifi:  Arc<SshPool>,
+    serial: Arc<SerialQueue>,
+    ssh_usb: Arc<SshPool>,
+    ssh_wifi: Arc<SshPool>,
 }
 
 impl MacBridge {
-    pub async fn new() -> Result<Self, String> {
-        let serial = SerialQueue::new().await
+    pub async fn new(config: Config) -> Result<Self, String> {
+        let serial = SerialQueue::new(&config.serial)
+            .await
             .map_err(|e| format!("Serial init failed: {}", e))?;
 
         let bridge = MacBridge {
-            serial:   Arc::new(serial),
-            ssh_usb:  Arc::new(SshPool::new(SSH_USB_HOST)),
-            ssh_wifi: Arc::new(SshPool::new(SSH_WIFI_HOST)),
+            serial: Arc::new(serial),
+            ssh_usb: Arc::new(SshPool::new(config.hosts.usb.clone(), config.ssh.clone())),
+            ssh_wifi: Arc::new(SshPool::new(config.hosts.wifi.clone(), config.ssh.clone())),
         };
 
         // Spawn background health monitor
@@ -38,21 +37,15 @@ impl MacBridge {
     pub async fn request(&self, req: Request) -> Result<Response, String> {
         match &req {
             // Real-time queries → serial first
-            Request::GetCursor |
-            Request::GetScreens |
-            Request::GetActiveApp => {
+            Request::GetCursor | Request::GetScreens | Request::GetActiveApp => {
                 self.serial_with_fallback(req).await
             }
 
             // Large data → SSH directly
-            Request::GetClipboard => {
-                self.ssh_with_fallback(req).await
-            }
+            Request::GetClipboard => self.ssh_with_fallback(req).await,
 
             // Commands → SSH only
-            Request::RunCommand { .. } => {
-                self.ssh_with_fallback(req).await
-            }
+            Request::RunCommand { .. } => self.ssh_with_fallback(req).await,
         }
     }
 
@@ -102,7 +95,7 @@ impl MacBridge {
     // ── Health Monitor ─────────────────────────────
 
     fn spawn_health_monitor(&self) {
-        let ssh_usb  = self.ssh_usb.clone();
+        let ssh_usb = self.ssh_usb.clone();
         let ssh_wifi = self.ssh_wifi.clone();
 
         tokio::spawn(async move {
@@ -120,13 +113,13 @@ impl MacBridge {
 
     pub fn status(&self) -> BridgeStatus {
         BridgeStatus {
-            ssh_usb_healthy:  self.ssh_usb.is_healthy(),
+            ssh_usb_healthy: self.ssh_usb.is_healthy(),
             ssh_wifi_healthy: self.ssh_wifi.is_healthy(),
         }
     }
 }
 
 pub struct BridgeStatus {
-    pub ssh_usb_healthy:  bool,
+    pub ssh_usb_healthy: bool,
     pub ssh_wifi_healthy: bool,
 }

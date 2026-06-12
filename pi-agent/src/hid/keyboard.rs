@@ -1,7 +1,7 @@
+use crate::hid::keycodes::{char_to_hid, modifier_from_name, name_to_hid, MOD_NONE};
 use std::fs::OpenOptions;
 use std::io::Write;
 use tokio::time::{sleep, Duration};
-use crate::hid::keycodes::{char_to_hid, name_to_hid, modifier_from_name, MOD_NONE};
 
 use crate::config::HidConfig;
 const TAP_DELAY_MS: u64 = 30;
@@ -12,9 +12,7 @@ pub struct Keyboard {
 
 impl Keyboard {
     pub fn new(config: &HidConfig) -> Result<Self, std::io::Error> {
-        let device = OpenOptions::new()
-            .write(true)
-            .open(&config.keyboard)?;
+        let device = OpenOptions::new().write(true).open(&config.keyboard)?;
         Ok(Keyboard { device })
     }
 
@@ -97,7 +95,9 @@ impl Keyboard {
             if ch == '[' {
                 let mut token = String::new();
                 for inner in chars.by_ref() {
-                    if inner == ']' { break; }
+                    if inner == ']' {
+                        break;
+                    }
                     token.push(inner);
                 }
                 let parts: Vec<&str> = token.split('+').collect();

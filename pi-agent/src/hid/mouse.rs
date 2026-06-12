@@ -14,9 +14,7 @@ pub struct Mouse {
 
 impl Mouse {
     pub fn new(config: &HidConfig) -> Result<Self, std::io::Error> {
-        let device = OpenOptions::new()
-            .write(true)
-            .open(&config.mouse)?;
+        let device = OpenOptions::new().write(true).open(&config.mouse)?;
         Ok(Mouse {
             device,
             estimated_x: 0,
@@ -42,9 +40,7 @@ impl Mouse {
         self.send(0, dx, dy, 0)
     }
 
-    pub async fn move_smooth(
-        &mut self, dx: i32, dy: i32, steps: u32,
-    ) -> std::io::Result<()> {
+    pub async fn move_smooth(&mut self, dx: i32, dy: i32, steps: u32) -> std::io::Result<()> {
         let step_x = (dx / steps as i32) as i8;
         let step_y = (dy / steps as i32) as i8;
         for _ in 0..steps {
@@ -106,9 +102,7 @@ impl Mouse {
         self.send(0, 0, 0, amount)
     }
 
-    pub async fn scroll_smooth(
-        &mut self, amount: i32, steps: u32,
-    ) -> std::io::Result<()> {
+    pub async fn scroll_smooth(&mut self, amount: i32, steps: u32) -> std::io::Result<()> {
         let step = if amount > 0 { 1i8 } else { -1i8 };
         for _ in 0..amount.unsigned_abs() {
             self.scroll(step)?;
@@ -125,9 +119,7 @@ impl Mouse {
         self.send(0x01, dx, dy, 0)
     }
 
-    pub async fn drag_smooth(
-        &mut self, dx: i32, dy: i32, steps: u32,
-    ) -> std::io::Result<()> {
+    pub async fn drag_smooth(&mut self, dx: i32, dy: i32, steps: u32) -> std::io::Result<()> {
         let step_x = (dx / steps as i32) as i8;
         let step_y = (dy / steps as i32) as i8;
         for _ in 0..steps {

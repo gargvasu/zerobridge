@@ -1,11 +1,11 @@
-use tokio::sync::{mpsc, oneshot};
 use crate::serial::protocol::{Request, Response};
 use crate::serial::transport::SerialTransport;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::config::SerialConfig;
 
 struct QueuedRequest {
-    req:   Request,
+    req: Request,
     reply: oneshot::Sender<Result<Response, String>>,
 }
 
@@ -23,10 +23,7 @@ impl SerialQueue {
         Ok(SerialQueue { tx })
     }
 
-    async fn worker(
-        mut rx: mpsc::Receiver<QueuedRequest>,
-        transport: SerialTransport,
-    ) {
+    async fn worker(mut rx: mpsc::Receiver<QueuedRequest>, transport: SerialTransport) {
         eprintln!("[serial_queue] Worker started");
         while let Some(item) = rx.recv().await {
             let result = transport.request(item.req).await;
@@ -38,7 +35,9 @@ impl SerialQueue {
     pub async fn request(&self, req: Request) -> Result<Response, String> {
         let (tx, rx) = oneshot::channel();
 
-        self.tx.send(QueuedRequest { req, reply: tx }).await
+        self.tx
+            .send(QueuedRequest { req, reply: tx })
+            .await
             .map_err(|_| "Serial queue closed".to_string())?;
 
         rx.await.map_err(|_| "Reply channel closed".to_string())?

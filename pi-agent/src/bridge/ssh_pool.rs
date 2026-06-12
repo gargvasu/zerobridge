@@ -1,48 +1,48 @@
+use ssh2::Session;
 use std::io::Read;
 use std::net::TcpStream;
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tokio::sync::Mutex;
-use ssh2::Session;
 
 use crate::serial::protocol::{Request, Response};
 
 use crate::config::SshConfig;
 
 pub struct SshPool {
-    host:    String,
-    config:  SshConfig,
-    conn:    Arc<Mutex<Option<SshConnection>>>,
+    host: String,
+    config: SshConfig,
+    conn: Arc<Mutex<Option<SshConnection>>>,
     healthy: Arc<AtomicBool>,
 }
 
 pub struct SshConnection {
     session: Session,
-    host:    String,
+    host: String,
 }
 
 impl SshConnection {
     pub fn connect(host: &str, config: &SshConfig) -> Result<Self, String> {
-        let tcp = TcpStream::connect(format!("{}:22", host))
+        let tcp = TcpStream::connect(format!("{}:{}", host, config.port))
             .map_err(|e| format!("TCP connect failed: {}", e))?;
 
-        tcp.set_read_timeout(Some(std::time::Duration::from_secs(5)))
-           .map_err(|e| format!("Set timeout failed: {}", e))?;
+        let timeout = std::time::Duration::from_millis(config.timeout_ms);
+        tcp.set_read_timeout(Some(timeout))
+            .map_err(|e| format!("Set timeout failed: {}", e))?;
+        tcp.set_write_timeout(Some(timeout))
+            .map_err(|e| format!("Set timeout failed: {}", e))?;
 
-        let mut session = Session::new()
-            .map_err(|e| format!("Session create failed: {}", e))?;
+        let mut session = Session::new().map_err(|e| format!("Session create failed: {}", e))?;
 
         session.set_tcp_stream(tcp);
-        session.handshake()
+        session
+            .handshake()
             .map_err(|e| format!("Handshake failed: {}", e))?;
 
-        session.userauth_pubkey_file(
-            &config.user,
-            None,
-            Path::new(&config.key),
-            None,
-        ).map_err(|e| format!("Auth failed: {}", e))?;
+        session
+            .userauth_pubkey_file(&config.user, None, Path::new(&config.key), None)
+            .map_err(|e| format!("Auth failed: {}", e))?;
 
         if !session.authenticated() {
             return Err("SSH authentication failed".into());
@@ -57,17 +57,22 @@ impl SshConnection {
     }
 
     pub fn exec(&mut self, cmd: &str) -> Result<String, String> {
-        let mut channel = self.session.channel_session()
+        let mut channel = self
+            .session
+            .channel_session()
             .map_err(|e| format!("Channel open failed: {}", e))?;
 
-        channel.exec(cmd)
+        channel
+            .exec(cmd)
             .map_err(|e| format!("Exec failed: {}", e))?;
 
         let mut output = String::new();
-        channel.read_to_string(&mut output)
+        channel
+            .read_to_string(&mut output)
             .map_err(|e| format!("Read failed: {}", e))?;
 
-        channel.wait_close()
+        channel
+            .wait_close()
             .map_err(|e| format!("Wait close failed: {}", e))?;
 
         Ok(output.trim().to_string())
@@ -80,17 +85,12 @@ impl SshConnection {
     }
 }
 
-pub struct SshPool {
-    host:    String,
-    conn:    Arc<Mutex<Option<SshConnection>>>,
-    healthy: Arc<AtomicBool>,
-}
-
 impl SshPool {
-    pub fn new(host: &str) -> Self {
+    pub fn new(host: String, config: SshConfig) -> Self {
         SshPool {
-            host:    host.to_string(),
-            conn:    Arc::new(Mutex::new(None)),
+            host,
+            config,
+            conn: Arc::new(Mutex::new(None)),
             healthy: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -158,7 +158,7 @@ impl SshPool {
 
     fn req_to_cmd(&self, req: &Request) -> String {
         match req {
-            Request::GetCursor => 
+            Request::GetCursor =>
                 "python3 -c 'from Quartz import NSEvent; import json; p=NSEvent.mouseLocation(); print(json.dumps({\"type\":\"cursor_pos\",\"x\":round(p.x,1),\"y\":round(p.y,1)}))'".into(),
 
             Request::GetScreens =>
@@ -178,8 +178,8 @@ impl SshPool {
     fn parse_output(&self, req: Request, output: String) -> Result<Response, String> {
         match req {
             Request::GetCursor => {
-                let v: serde_json::Value = serde_json::from_str(&output)
-                    .map_err(|e| format!("Parse cursor: {}", e))?;
+                let v: serde_json::Value =
+                    serde_json::from_str(&output).map_err(|e| format!("Parse cursor: {}", e))?;
                 Ok(Response::CursorPos {
                     x: v["x"].as_f64().unwrap_or(0.0),
                     y: v["y"].as_f64().unwrap_or(0.0),
@@ -187,36 +187,34 @@ impl SshPool {
             }
 
             Request::GetScreens => {
-                let v: serde_json::Value = serde_json::from_str(&output)
-                    .map_err(|e| format!("Parse screens: {}", e))?;
-                let layout = v["layout"].as_array()
+                let v: serde_json::Value =
+                    serde_json::from_str(&output).map_err(|e| format!("Parse screens: {}", e))?;
+                let layout = v["layout"]
+                    .as_array()
                     .ok_or("No layout field")?
                     .iter()
                     .map(|s| crate::serial::protocol::Screen {
                         id: s["id"].as_u64().unwrap_or(0) as u32,
-                        x:  s["x"].as_i64().unwrap_or(0) as i32,
-                        y:  s["y"].as_i64().unwrap_or(0) as i32,
-                        w:  s["w"].as_u64().unwrap_or(0) as u32,
-                        h:  s["h"].as_u64().unwrap_or(0) as u32,
+                        x: s["x"].as_i64().unwrap_or(0) as i32,
+                        y: s["y"].as_i64().unwrap_or(0) as i32,
+                        w: s["w"].as_u64().unwrap_or(0) as u32,
+                        h: s["h"].as_u64().unwrap_or(0) as u32,
                     })
                     .collect();
                 Ok(Response::Screens { layout })
             }
 
-            Request::GetClipboard =>
-                Ok(Response::Clipboard { text: output }),
+            Request::GetClipboard => Ok(Response::Clipboard { text: output }),
 
-            Request::GetActiveApp =>
-                Ok(Response::ActiveApp {
-                    name:   output,
-                    window: String::new(),
-                }),
+            Request::GetActiveApp => Ok(Response::ActiveApp {
+                name: output,
+                window: String::new(),
+            }),
 
-            Request::RunCommand { .. } =>
-                Ok(Response::CommandResult {
-                    output,
-                    error: String::new(),
-                }),
+            Request::RunCommand { .. } => Ok(Response::CommandResult {
+                output,
+                error: String::new(),
+            }),
         }
     }
 }
