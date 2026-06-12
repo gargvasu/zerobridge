@@ -10,10 +10,7 @@ use crate::serial::protocol::{
     Request, Response, RequestEnvelope, ResponseEnvelope
 };
 
-const SERIAL_DEVICE: &str = "/dev/ttyGS0";
-const TIMEOUT_MS: u64 = 3000;
-const CURSOR_TIMEOUT_MS: u64 = 1000;  // cursor is fast, fail quickly
-const MAX_RETRIES: u32 = 2;
+use crate::config::SerialConfig;
 
 type PendingMap = Arc<Mutex<HashMap<String, oneshot::Sender<Response>>>>;
 
@@ -38,29 +35,35 @@ fn timeout_for(req: &Request) -> u64 {
 pub struct SerialTransport {
     writer:  Arc<Mutex<tokio::fs::File>>,
     pending: PendingMap,
+    timeout_ms: u64,
+    cursor_timeout_ms: u64,
+    max_retries: u32,
 }
 
 impl SerialTransport {
-    pub async fn new() -> Result<Self, std::io::Error> {
+    pub async fn new(config: &SerialConfig) -> Result<Self, std::io::Error> {
         let writer = OpenOptions::new()
             .write(true)
-            .open(SERIAL_DEVICE)
+            .open(&config.device)
             .await?;
         set_raw_mode(&writer);
 
         let reader = OpenOptions::new()
             .read(true)
-            .open(SERIAL_DEVICE)
+            .open(&config.device)
             .await?;
         set_raw_mode(&reader);
 
-        eprintln!("[serial] Opened {}", SERIAL_DEVICE);
+        eprintln!("[serial] Opened {}", &config.device);
 
         let pending: PendingMap = Arc::new(Mutex::new(HashMap::new()));
 
         let transport = SerialTransport {
             writer:  Arc::new(Mutex::new(writer)),
             pending: pending.clone(),
+            timeout_ms: config.timeout_ms,
+            cursor_timeout_ms: config.cursor_timeout_ms,
+            max_retries: config.max_retries,
         };
 
         tokio::spawn(Self::read_loop(reader, pending));
@@ -158,9 +161,9 @@ impl SerialTransport {
         let timeout_ms = timeout_for(&req);
         let mut last_err = String::new();
 
-        for attempt in 0..=MAX_RETRIES {
+        for attempt in 0..=self.max_retries {
             if attempt > 0 {
-                eprintln!("[serial] Retry {}/{} for {:?}", attempt, MAX_RETRIES, req);
+                eprintln!("[serial] Retry {}/{} for {:?}", attempt, self.max_retries, req);
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }
 
@@ -178,7 +181,7 @@ impl SerialTransport {
             }
         }
 
-        Err(format!("Failed after {} attempts: {}", MAX_RETRIES + 1, last_err))
+        Err(format!("Failed after {} attempts: {}", self.max_retries + 1, last_err))
     }
 
     // Direct request with custom timeout — for callers that need control

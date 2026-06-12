@@ -2,7 +2,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use tokio::time::{sleep, Duration};
 
-const MEDIA_DEVICE: &str = "/dev/hidg2";
+use crate::config::HidConfig;
 const TAP_DELAY_MS: u64 = 50;
 
 // Consumer key codes
@@ -22,10 +22,10 @@ pub struct Media {
 }
 
 impl Media {
-    pub fn new() -> Result<Self, std::io::Error> {
+    pub fn new(config: &HidConfig) -> Result<Self, std::io::Error> {
         let device = OpenOptions::new()
             .write(true)
-            .open(MEDIA_DEVICE)?;
+            .open(&config.media)?;
         Ok(Media { device })
     }
 

@@ -2,7 +2,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use tokio::time::{sleep, Duration};
 
-const MOUSE_DEVICE: &str = "/dev/hidg1";
+use crate::config::HidConfig;
 const CLICK_DELAY_MS: u64 = 50;
 const SMOOTH_DELAY_MS: u64 = 10;
 
@@ -13,10 +13,10 @@ pub struct Mouse {
 }
 
 impl Mouse {
-    pub fn new() -> Result<Self, std::io::Error> {
+    pub fn new(config: &HidConfig) -> Result<Self, std::io::Error> {
         let device = OpenOptions::new()
             .write(true)
-            .open(MOUSE_DEVICE)?;
+            .open(&config.mouse)?;
         Ok(Mouse {
             device,
             estimated_x: 0,

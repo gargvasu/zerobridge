@@ -3,7 +3,7 @@ use std::io::Write;
 use tokio::time::{sleep, Duration};
 use crate::hid::keycodes::{char_to_hid, name_to_hid, modifier_from_name, MOD_NONE};
 
-const HID_DEVICE: &str = "/dev/hidg0";
+use crate::config::HidConfig;
 const TAP_DELAY_MS: u64 = 30;
 
 pub struct Keyboard {
@@ -11,10 +11,10 @@ pub struct Keyboard {
 }
 
 impl Keyboard {
-    pub fn new() -> Result<Self, std::io::Error> {
+    pub fn new(config: &HidConfig) -> Result<Self, std::io::Error> {
         let device = OpenOptions::new()
             .write(true)
-            .open(HID_DEVICE)?;
+            .open(&config.keyboard)?;
         Ok(Keyboard { device })
     }
 
