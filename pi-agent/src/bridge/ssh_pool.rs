@@ -104,6 +104,7 @@ pub struct SshPool {
     config: SshConfig,
     conn: Arc<Mutex<Option<SshConnection>>>,
     healthy: Arc<AtomicBool>,
+    checked: Arc<AtomicBool>,
 }
 
 impl SshPool {
@@ -113,6 +114,7 @@ impl SshPool {
             config,
             conn: Arc::new(Mutex::new(None)),
             healthy: Arc::new(AtomicBool::new(false)),
+            checked: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -120,9 +122,14 @@ impl SshPool {
         self.healthy.load(Ordering::Relaxed)
     }
 
+    pub fn should_try(&self) -> bool {
+        self.is_healthy() || !self.checked.load(Ordering::Relaxed)
+    }
+
     async fn ensure_connected(&self) -> Result<(), String> {
         let mut guard = self.conn.lock().await;
         if guard.is_none() {
+            self.checked.store(true, Ordering::Relaxed);
             match SshConnection::connect(&self.host, &self.config).await {
                 Ok(conn) => {
                     self.healthy.store(true, Ordering::Relaxed);
@@ -161,6 +168,7 @@ impl SshPool {
     }
 
     pub async fn check_health(&self) {
+        self.checked.store(true, Ordering::Relaxed);
         match self.exec("echo ok").await {
             Ok(o) if o.trim() == "ok" => {
                 self.healthy.store(true, Ordering::Relaxed);

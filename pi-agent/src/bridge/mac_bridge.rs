@@ -66,7 +66,7 @@ impl MacBridge {
 
     async fn ssh_with_fallback(&self, req: Request) -> Result<Response, String> {
         // Try USB tether first
-        if self.ssh_usb.is_healthy() {
+        if self.ssh_usb.should_try() {
             match self.ssh_usb.request(req.clone()).await {
                 Ok(resp) => {
                     eprintln!("[bridge] ✅ ssh_usb");
