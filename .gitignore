@@ -1,10 +1,33 @@
-/target/
+# Rust build artifacts
+pi-agent/target/
+target/
 
-# macOS metadata
+# Go build artifacts
+go-server/bin/
+go-server/*.exe
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+mac-agent/__pycache__/
+
+# macOS
 .DS_Store
 ._*
 
-# Editor/temporary files
+# Editor
 *.swp
 *.swo
 *~
+.vscode/
+.idea/
+
+# Build outputs
+dist/
+*.bin
+
+# Logs
+*.log
+/tmp/
