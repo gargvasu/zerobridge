@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Screen {
     pub id: u32,
     pub x: i32,
@@ -9,7 +9,7 @@ pub struct Screen {
     pub h: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Request {
     GetCursor,
@@ -19,7 +19,7 @@ pub enum Request {
     RunCommand { cmd: String },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Response {
     CursorPos { x: f64, y: f64 },
@@ -30,14 +30,14 @@ pub enum Response {
     Error { message: String },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestEnvelope {
     pub id: String,
     #[serde(flatten)]
     pub request: Request,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseEnvelope {
     pub id: String,
     #[serde(flatten)]
