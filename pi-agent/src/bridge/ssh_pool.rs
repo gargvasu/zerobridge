@@ -1,88 +1,109 @@
-use ssh2::Session;
-use std::io::Read;
-use std::net::TcpStream;
-use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+
+use russh::client;
+use russh_keys::load_secret_key;
 use tokio::sync::Mutex;
 
+use crate::config::SshConfig;
 use crate::serial::protocol::{Request, Response};
 
-use crate::config::SshConfig;
+struct ClientHandler;
+
+#[async_trait::async_trait]
+impl client::Handler for ClientHandler {
+    type Error = russh::Error;
+
+    async fn check_server_key(
+        &mut self,
+        _server_public_key: &russh_keys::key::PublicKey,
+    ) -> Result<bool, Self::Error> {
+        Ok(true)
+    }
+}
+
+pub struct SshConnection {
+    handle: client::Handle<ClientHandler>,
+    host: String,
+}
+
+impl SshConnection {
+    pub async fn connect(host: &str, config: &SshConfig) -> Result<Self, String> {
+        let client_config = Arc::new(client::Config {
+            inactivity_timeout: Some(std::time::Duration::from_millis(config.timeout_ms)),
+            ..<_>::default()
+        });
+
+        let mut handle = client::connect(client_config, (host, config.port), ClientHandler)
+            .await
+            .map_err(|e| format!("SSH connect to {} failed: {}", host, e))?;
+
+        let key = load_secret_key(&config.key, None)
+            .map_err(|e| format!("Load key {} failed: {}", config.key, e))?;
+
+        let auth_res = handle
+            .authenticate_publickey(&config.user, Arc::new(key))
+            .await
+            .map_err(|e| format!("Auth failed: {}", e))?;
+
+        if !auth_res {
+            return Err(format!("SSH auth rejected for {}", host));
+        }
+
+        eprintln!("[ssh] Connected to {}", host);
+
+        Ok(SshConnection {
+            handle,
+            host: host.to_string(),
+        })
+    }
+
+    pub async fn exec(&mut self, cmd: &str) -> Result<String, String> {
+        let mut channel = self
+            .handle
+            .channel_open_session()
+            .await
+            .map_err(|e| format!("Channel open failed: {}", e))?;
+
+        channel
+            .exec(true, cmd)
+            .await
+            .map_err(|e| format!("Exec '{}' failed: {}", cmd, e))?;
+
+        let mut output = Vec::new();
+
+        loop {
+            match channel.wait().await {
+                Some(russh::ChannelMsg::Data { data }) => {
+                    output.extend_from_slice(&data);
+                }
+                Some(russh::ChannelMsg::ExitStatus { exit_status }) => {
+                    if exit_status != 0 {
+                        eprintln!("[ssh] command exited with status {}", exit_status);
+                    }
+                    break;
+                }
+                None => break,
+                _ => {}
+            }
+        }
+
+        Ok(String::from_utf8_lossy(&output).trim().to_string())
+    }
+
+    pub async fn is_healthy(&mut self) -> bool {
+        self.exec("echo ok")
+            .await
+            .map(|o| o.trim() == "ok")
+            .unwrap_or(false)
+    }
+}
 
 pub struct SshPool {
     host: String,
     config: SshConfig,
     conn: Arc<Mutex<Option<SshConnection>>>,
     healthy: Arc<AtomicBool>,
-}
-
-pub struct SshConnection {
-    session: Session,
-    host: String,
-}
-
-impl SshConnection {
-    pub fn connect(host: &str, config: &SshConfig) -> Result<Self, String> {
-        let tcp = TcpStream::connect(format!("{}:{}", host, config.port))
-            .map_err(|e| format!("TCP connect failed: {}", e))?;
-
-        let timeout = std::time::Duration::from_millis(config.timeout_ms);
-        tcp.set_read_timeout(Some(timeout))
-            .map_err(|e| format!("Set timeout failed: {}", e))?;
-        tcp.set_write_timeout(Some(timeout))
-            .map_err(|e| format!("Set timeout failed: {}", e))?;
-
-        let mut session = Session::new().map_err(|e| format!("Session create failed: {}", e))?;
-
-        session.set_tcp_stream(tcp);
-        session
-            .handshake()
-            .map_err(|e| format!("Handshake failed: {}", e))?;
-
-        session
-            .userauth_pubkey_file(&config.user, None, Path::new(&config.key), None)
-            .map_err(|e| format!("Auth failed: {}", e))?;
-
-        if !session.authenticated() {
-            return Err("SSH authentication failed".into());
-        }
-
-        eprintln!("[ssh] Connected to {}", host);
-
-        Ok(SshConnection {
-            session,
-            host: host.to_string(),
-        })
-    }
-
-    pub fn exec(&mut self, cmd: &str) -> Result<String, String> {
-        let mut channel = self
-            .session
-            .channel_session()
-            .map_err(|e| format!("Channel open failed: {}", e))?;
-
-        channel
-            .exec(cmd)
-            .map_err(|e| format!("Exec failed: {}", e))?;
-
-        let mut output = String::new();
-        channel
-            .read_to_string(&mut output)
-            .map_err(|e| format!("Read failed: {}", e))?;
-
-        channel
-            .wait_close()
-            .map_err(|e| format!("Wait close failed: {}", e))?;
-
-        Ok(output.trim().to_string())
-    }
-
-    pub fn is_healthy(&mut self) -> bool {
-        self.exec("echo ok")
-            .map(|o| o.trim() == "ok")
-            .unwrap_or(false)
-    }
 }
 
 impl SshPool {
@@ -99,11 +120,10 @@ impl SshPool {
         self.healthy.load(Ordering::Relaxed)
     }
 
-    // Get or create connection
-    async fn get_conn(&self) -> Result<(), String> {
+    async fn ensure_connected(&self) -> Result<(), String> {
         let mut guard = self.conn.lock().await;
         if guard.is_none() {
-            match SshConnection::connect(&self.host, &self.config) {
+            match SshConnection::connect(&self.host, &self.config).await {
                 Ok(conn) => {
                     self.healthy.store(true, Ordering::Relaxed);
                     *guard = Some(conn);
@@ -118,15 +138,14 @@ impl SshPool {
     }
 
     pub async fn exec(&self, cmd: &str) -> Result<String, String> {
-        self.get_conn().await?;
+        self.ensure_connected().await?;
 
         let mut guard = self.conn.lock().await;
         let conn = guard.as_mut().unwrap();
 
-        match conn.exec(cmd) {
+        match conn.exec(cmd).await {
             Ok(output) => Ok(output),
             Err(e) => {
-                // Connection broken — reset for next attempt
                 eprintln!("[ssh] {} exec failed: {} — resetting", self.host, e);
                 self.healthy.store(false, Ordering::Relaxed);
                 *guard = None;
@@ -149,8 +168,7 @@ impl SshPool {
             }
             _ => {
                 self.healthy.store(false, Ordering::Relaxed);
-                eprintln!("[ssh] {} unhealthy", self.host);
-                // Reset connection
+                eprintln!("[ssh] {} unhealthy — resetting", self.host);
                 *self.conn.lock().await = None;
             }
         }
@@ -164,14 +182,12 @@ impl SshPool {
             Request::GetScreens =>
                 "python3 -c 'from AppKit import NSScreen; import json; screens=[{\"id\":i,\"x\":int(s.frame().origin.x),\"y\":int(s.frame().origin.y),\"w\":int(s.frame().size.width),\"h\":int(s.frame().size.height)} for i,s in enumerate(NSScreen.screens())]; screens.sort(key=lambda s:s[\"x\"]); print(json.dumps({\"type\":\"screens\",\"layout\":screens}))'".into(),
 
-            Request::GetClipboard =>
-                "pbpaste".into(),
+            Request::GetClipboard => "pbpaste".into(),
 
             Request::GetActiveApp =>
                 "osascript -e 'tell application \"System Events\" to get name of first process where it is frontmost'".into(),
 
-            Request::RunCommand { cmd } =>
-                cmd.clone(),
+            Request::RunCommand { cmd } => cmd.clone(),
         }
     }
 
