@@ -1,0 +1,10 @@
+/target/
+
+# macOS metadata
+.DS_Store
+._*
+
+# Editor/temporary files
+*.swp
+*.swo
+*~
