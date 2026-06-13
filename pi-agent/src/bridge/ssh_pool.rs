@@ -160,6 +160,19 @@ impl SshPool {
 
         match conn.exec(cmd).await {
             Ok(output) => Ok(output),
+            Err(e) if e.contains("Channel") => {
+                // Channel error — session likely stale, reconnect and retry
+                eprintln!("[ssh] {} channel error — reconnecting: {}", self.host, e);
+                self.healthy.store(false, Ordering::Relaxed);
+                *guard = None;
+                drop(guard);
+
+                // Reconnect
+                self.ensure_connected().await?;
+                let mut guard = self.conn.lock().await;
+                let conn = guard.as_mut().unwrap();
+                conn.exec(cmd).await
+            }
             Err(e) => {
                 eprintln!("[ssh] {} exec failed: {} — resetting", self.host, e);
                 self.healthy.store(false, Ordering::Relaxed);
@@ -179,15 +192,32 @@ impl SshPool {
 
     pub async fn check_health(&self) {
         self.checked.store(true, Ordering::Relaxed);
-        match self.exec("echo ok").await {
-            Ok(o) if o.trim() == "ok" => {
-                self.healthy.store(true, Ordering::Relaxed);
-                eprintln!("[ssh] {} ✅ healthy", self.host);
+
+        // Reset connection first — force fresh connect
+        {
+            let mut guard = self.conn.lock().await;
+            *guard = None;
+            self.healthy.store(false, Ordering::Relaxed);
+        }
+
+        // Try fresh connection
+        match self.ensure_connected().await {
+            Ok(_) => {
+                // Test with echo
+                match self.exec("echo ok").await {
+                    Ok(o) if o.trim() == "ok" => {
+                        self.healthy.store(true, Ordering::Relaxed);
+                        eprintln!("[ssh] {} ✅ healthy", self.host);
+                    }
+                    _ => {
+                        self.healthy.store(false, Ordering::Relaxed);
+                        eprintln!("[ssh] {} ❌ unhealthy", self.host);
+                        *self.conn.lock().await = None;
+                    }
+                }
             }
-            _ => {
-                self.healthy.store(false, Ordering::Relaxed);
-                eprintln!("[ssh] {} ❌ unhealthy — resetting", self.host);
-                *self.conn.lock().await = None;
+            Err(e) => {
+                eprintln!("[ssh] {} ❌ connect failed: {}", self.host, e);
             }
         }
     }
@@ -213,6 +243,18 @@ impl SshPool {
                 let escaped = cmd.replace('\'', "'\\''");
                 format!("~/bin/zb-agent run '{}'", escaped)
             }
+
+            Request::GetWindows =>
+                "~/bin/zb-agent windows".into(),
+
+            Request::GetWindowForApp { app } =>
+                format!("~/bin/zb-agent window '{}'",
+                    app.replace('\'', "'\\''")),
+
+            Request::FocusApp { app } =>
+                format!("~/bin/zb-agent focus '{}'",
+                    app.replace('\'', "'\\''")),
+
         }
     }
 
@@ -288,6 +330,53 @@ impl SshPool {
                         error: String::new(),
                     })
                 }
+            }
+
+            Request::GetWindows => {
+                let v: serde_json::Value = serde_json::from_str(&output)
+                    .map_err(|e| format!("Parse windows failed: {}", e))?;
+                Ok(Response::Windows {
+                    list: v["list"].as_array()
+                        .ok_or("Missing list field")?
+                        .iter()
+                        .map(|w| crate::ipc::WindowInfo {
+                            id:    w["id"].as_u64().unwrap_or(0) as u32,
+                            pid:   w["pid"].as_u64().unwrap_or(0) as u32,
+                            app:   w["app"].as_str().unwrap_or("").to_string(),
+                            title: w["title"].as_str().unwrap_or("").to_string(),
+                            x:     w["x"].as_i64().unwrap_or(0) as i32,
+                            y:     w["y"].as_i64().unwrap_or(0) as i32,
+                            w:     w["w"].as_u64().unwrap_or(0) as u32,
+                            h:     w["h"].as_u64().unwrap_or(0) as u32,
+                        })
+                        .collect()
+                })
+            }
+
+            Request::GetWindowForApp { .. } => {
+                let v: serde_json::Value = serde_json::from_str(&output)
+                    .map_err(|e| format!("Parse window failed: {}", e))?;
+                Ok(Response::Window {
+                    info: crate::ipc::WindowInfo {
+                        id:    v["id"].as_u64().unwrap_or(0) as u32,
+                        pid:   0,
+                        app:   v["app"].as_str().unwrap_or("").to_string(),
+                        title: v["title"].as_str().unwrap_or("").to_string(),
+                        x:     v["x"].as_i64().unwrap_or(0) as i32,
+                        y:     v["y"].as_i64().unwrap_or(0) as i32,
+                        w:     v["w"].as_u64().unwrap_or(0) as u32,
+                        h:     v["h"].as_u64().unwrap_or(0) as u32,
+                    }
+                })
+            }
+
+            Request::FocusApp { app } => {
+                let v: serde_json::Value = serde_json::from_str(&output)
+                    .map_err(|e| format!("Parse focus failed: {}", e))?;
+                Ok(Response::FocusResult {
+                    app,
+                    success: v["success"].as_bool().unwrap_or(false),
+                })
             }
         }
     }

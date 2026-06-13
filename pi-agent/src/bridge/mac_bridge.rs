@@ -41,6 +41,10 @@ impl MacBridge {
                 self.serial_with_fallback(req).await
             }
 
+            Request::GetWindows | Request::GetWindowForApp { .. } | Request::FocusApp { .. } => {
+                self.ssh_with_fallback(req).await
+            }
+
             // Large data → SSH directly
             Request::GetClipboard => self.ssh_with_fallback(req).await,
 

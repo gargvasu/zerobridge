@@ -16,6 +16,9 @@ pub enum Request {
     GetScreens,
     GetClipboard,
     GetActiveApp,
+    GetWindows,                      // ← new
+    GetWindowForApp { app: String }, // ← new
+    FocusApp { app: String },        // ← new
     RunCommand { cmd: String },
 }
 
@@ -27,6 +30,9 @@ pub enum Response {
     Clipboard { text: String },
     ActiveApp { name: String, window: String },
     CommandResult { output: String, error: String },
+    Windows { list: Vec<crate::ipc::WindowInfo> },  // ← new
+    Window { info: crate::ipc::WindowInfo },          // ← new
+    FocusResult { app: String, success: bool },       // ← new
     Error { message: String },
 }
 
