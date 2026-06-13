@@ -14,26 +14,41 @@ use daemon::Daemon;
 
 #[tokio::main]
 async fn main() {
-    println!("ZeroBridge daemon starting...");
+    eprintln!("[zerobridge] Starting pi-agent v{}", env!("CARGO_PKG_VERSION"));
 
+    // Handle SIGTERM and SIGINT gracefully
     let config = Config::load().unwrap_or_else(|e| {
-        eprintln!("[config] Failed: {} — using defaults", e);
+        eprintln!("[zerobridge] Config failed: {} — using defaults", e);
         Config::default()
     });
 
-    eprintln!("[config] SSH user:   {}", config.ssh.user);
-    eprintln!("[config] hosts.usb:  {}", config.hosts.usb);
-    eprintln!("[config] hosts.wifi: {}", config.hosts.wifi);
-    eprintln!("[config] serial:     {}", config.serial.device);
+    eprintln!("[zerobridge] SSH user:   {}", config.ssh.user);
+    eprintln!("[zerobridge] hosts.usb:  {}", config.hosts.usb);
+    eprintln!("[zerobridge] hosts.wifi: {}", config.hosts.wifi);
+    eprintln!("[zerobridge] serial:     {}", config.serial.device);
 
     let daemon = Daemon::new(config).await
-        .expect("Failed to init daemon");
+        .unwrap_or_else(|e| {
+            eprintln!("[zerobridge] Fatal: {}", e);
+            std::process::exit(1);
+        });
 
-    eprintln!("[daemon] All subsystems ready");
+    eprintln!("[zerobridge] All subsystems ready");
 
-    // Run forever
-    if let Err(e) = daemon.run().await {
-        eprintln!("[daemon] Fatal error: {}", e);
-        std::process::exit(1);
+    // Handle shutdown signals
+    tokio::select! {
+        result = daemon.run() => {
+            if let Err(e) = result {
+                eprintln!("[zerobridge] Daemon error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        _ = tokio::signal::ctrl_c() => {
+            eprintln!("[zerobridge] Received SIGINT — shutting down");
+        }
     }
+
+    // Cleanup
+    let _ = std::fs::remove_file("/tmp/zerobridge.sock");
+    eprintln!("[zerobridge] Shutdown complete");
 }

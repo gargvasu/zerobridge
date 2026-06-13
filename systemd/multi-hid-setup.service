@@ -1,0 +1,16 @@
+[Unit]
+Description=ZeroBridge USB HID Gadget Setup
+Documentation=https://github.com/gargvasu/zerobridge
+After=sysinit.target
+Before=pi-agent.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/multi-hid-setup.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=multi-hid-setup
+
+[Install]
+WantedBy=multi-user.target

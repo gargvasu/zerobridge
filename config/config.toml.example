@@ -1,0 +1,27 @@
+# ZeroBridge Configuration
+# Copy to ~/.config/zerobridge/config.toml and edit
+
+[ssh]
+# SSH user on the Mac
+user       = "pi"
+# Path to SSH private key on Pi Zero
+key        = "/home/pi/.ssh/id_ed25519"
+port       = 22
+timeout_ms = 5000
+
+[hosts]
+# Mac Mini IP over USB tether (primary — fastest)
+usb  = "169.254.206.1"
+# Mac Mini hostname or IP over WiFi (fallback)
+wifi = "192.168.0.100"
+
+[serial]
+device            = "/dev/ttyGS0"
+timeout_ms        = 3000
+cursor_timeout_ms = 1000
+max_retries       = 2
+
+[hid]
+keyboard = "/dev/hidg0"
+mouse    = "/dev/hidg1"
+media    = "/dev/hidg2"
