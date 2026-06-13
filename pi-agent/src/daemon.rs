@@ -3,13 +3,12 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 
 use crate::bridge::mac_bridge::MacBridge;
-use crate::hid::keyboard::Keyboard;
-use crate::hid::mouse::Mouse;
-use crate::hid::media::Media;
 use crate::config::Config;
+use crate::hid::keyboard::Keyboard;
+use crate::hid::media::Media;
+use crate::hid::mouse::Mouse;
 use crate::ipc::{IpcRequest, IpcResponse};
 use crate::serial::protocol::Request as BridgeRequest;
-use std::os::unix::fs::PermissionsExt as _;
 
 const SOCKET_PATH: &str = "/tmp/zerobridge.sock";
 
@@ -43,17 +42,19 @@ impl Daemon {
     }
 
     pub async fn run(self) -> Result<(), String> {
-        // Clean up stale socket
         let _ = std::fs::remove_file(SOCKET_PATH);
 
         let listener = UnixListener::bind(SOCKET_PATH)
             .map_err(|e| format!("Bind {} failed: {}", SOCKET_PATH, e))?;
 
-        // Set permissions so Go server can connect
-        std::fs::set_permissions(
-            SOCKET_PATH,
-            std::os::unix::fs::PermissionsExt::from_mode(0o666),
-        ).map_err(|e| format!("Set permissions failed: {}", e))?;
+        // Set permissions — full path, no import needed
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(
+                SOCKET_PATH,
+                std::fs::Permissions::from_mode(0o666),
+            ).map_err(|e| format!("Set permissions failed: {}", e))?;
+        }
 
         eprintln!("[daemon] Listening on {}", SOCKET_PATH);
 
@@ -115,7 +116,6 @@ impl Daemon {
     }
 
     async fn handle_request(&self, raw: &str) -> IpcResponse {
-        // Extract id for all responses
         let id = serde_json::from_str::<serde_json::Value>(raw)
             .ok()
             .and_then(|v| v["id"].as_str().map(|s| s.to_string()))
@@ -123,9 +123,7 @@ impl Daemon {
 
         let req = match serde_json::from_str::<IpcRequest>(raw) {
             Ok(r) => r,
-            Err(e) => {
-                return IpcResponse::error(&id, &format!("Parse error: {}", e));
-            }
+            Err(e) => return IpcResponse::error(&id, &format!("Parse error: {}", e)),
         };
 
         match req {
@@ -281,14 +279,14 @@ impl Daemon {
             IpcRequest::MediaKey { key } => {
                 let mut media = self.media.lock().await;
                 let result = match key.as_str() {
-                    "play_pause"     => media.play_pause().await,
-                    "next"           => media.next().await,
-                    "prev"           => media.prev().await,
-                    "volume_up"      => media.volume_up().await,
-                    "volume_down"    => media.volume_down().await,
-                    "mute"           => media.mute().await,
-                    "brightness_up"  => media.brightness_up().await,
-                    "brightness_down"=> media.brightness_down().await,
+                    "play_pause"      => media.play_pause().await,
+                    "next"            => media.next().await,
+                    "prev"            => media.prev().await,
+                    "volume_up"       => media.volume_up().await,
+                    "volume_down"     => media.volume_down().await,
+                    "mute"            => media.mute().await,
+                    "brightness_up"   => media.brightness_up().await,
+                    "brightness_down" => media.brightness_down().await,
                     unknown => {
                         return IpcResponse::error(&id,
                             &format!("Unknown media key: {}", unknown));
