@@ -11,7 +11,7 @@ timeout_ms = 5000
 
 [hosts]
 # Mac Mini IP over USB tether (primary — fastest)
-usb  = "169.254.206.1"
+usb  = "mac.hid"
 # Mac Mini hostname or IP over WiFi (fallback)
 wifi = "192.168.0.100"
 
