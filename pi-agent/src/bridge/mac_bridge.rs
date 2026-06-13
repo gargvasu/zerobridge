@@ -42,11 +42,41 @@ impl MacBridge {
             mode: config.bridge.mode.clone(),
         };
 
-        bridge.spawn_health_monitor();
-
         eprintln!("[bridge] Mode: {}", bridge.mode);
 
         Ok(bridge)
+    }
+
+    pub fn spawn_health_monitor_with_shutdown(&self, mut shutdown: tokio::sync::watch::Receiver<bool>) {
+        let ssh_usb  = self.ssh_usb.clone();
+        let ssh_wifi = self.ssh_wifi.clone();
+        let ws       = self.ws.clone();
+
+        tokio::spawn(async move {
+            // Initial probe shortly after startup so status reflects reality fast
+            tokio::select! {
+                _ = sleep(Duration::from_secs(3)) => {}
+                _ = shutdown.changed() => { return; }
+            }
+            eprintln!("[health] Initial channel probe...");
+            if let Some(ws) = &ws { ws.check_health().await; }
+            ssh_usb.check_health().await;
+            ssh_wifi.check_health().await;
+
+            loop {
+                tokio::select! {
+                    _ = sleep(Duration::from_secs(HEALTH_INTERVAL_SECS)) => {}
+                    _ = shutdown.changed() => {
+                        eprintln!("[health] Shutdown — stopping health monitor");
+                        return;
+                    }
+                }
+                eprintln!("[health] Checking channels...");
+                if let Some(ws) = &ws { ws.check_health().await; }
+                ssh_usb.check_health().await;
+                ssh_wifi.check_health().await;
+            }
+        });
     }
 
     // ── Public API ─────────────────────────────────
@@ -120,35 +150,6 @@ impl MacBridge {
                 Err(format!("All channels failed: {e}"))
             }
         }
-    }
-
-    // ── Health Monitor ─────────────────────────────
-
-    fn spawn_health_monitor(&self) {
-        let ssh_usb  = self.ssh_usb.clone();
-        let ssh_wifi = self.ssh_wifi.clone();
-        let ws       = self.ws.clone();
-
-        tokio::spawn(async move {
-            // Initial probe shortly after startup so status reflects reality fast
-            sleep(Duration::from_secs(3)).await;
-            eprintln!("[health] Initial channel probe...");
-            if let Some(ws) = &ws {
-                ws.check_health().await;
-            }
-            ssh_usb.check_health().await;
-            ssh_wifi.check_health().await;
-
-            loop {
-                sleep(Duration::from_secs(HEALTH_INTERVAL_SECS)).await;
-                eprintln!("[health] Checking channels...");
-                if let Some(ws) = &ws {
-                    ws.check_health().await;
-                }
-                ssh_usb.check_health().await;
-                ssh_wifi.check_health().await;
-            }
-        });
     }
 
     // ── Status ─────────────────────────────────────

@@ -43,7 +43,10 @@ impl Daemon {
         })
     }
 
-    pub async fn run(self) -> Result<(), String> {
+    pub async fn run(self, mut shutdown: tokio::sync::watch::Receiver<bool>) -> Result<(), String> {
+        // Start health monitor with shutdown awareness
+        self.bridge.spawn_health_monitor_with_shutdown(shutdown.clone());
+
         let sock = socket_path();
         let _ = std::fs::remove_file(&sock);
 
@@ -61,53 +64,76 @@ impl Daemon {
         let daemon = Arc::new(self);
 
         loop {
-            match listener.accept().await {
-                Ok((stream, _)) => {
-                    eprintln!("[daemon] New connection");
-                    let d = daemon.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = d.handle_connection(stream).await {
-                            eprintln!("[daemon] Connection error: {e}");
+            tokio::select! {
+                result = listener.accept() => {
+                    match result {
+                        Ok((stream, _)) => {
+                            eprintln!("[daemon] New connection");
+                            let d = daemon.clone();
+                            let mut sd = shutdown.clone();
+                            tokio::spawn(async move {
+                                if let Err(e) = d.handle_connection(stream, &mut sd).await {
+                                    eprintln!("[daemon] Connection error: {e}");
+                                }
+                            });
                         }
-                    });
+                        Err(e) => {
+                            eprintln!("[daemon] Accept error: {e}");
+                        }
+                    }
                 }
-                Err(e) => {
-                    eprintln!("[daemon] Accept error: {e}");
+                _ = shutdown.changed() => {
+                    eprintln!("[daemon] Shutdown signal — stopping accept loop");
+                    break;
                 }
             }
         }
+
+        Ok(())
     }
 
-    async fn handle_connection(&self, stream: UnixStream) -> Result<(), String> {
+    async fn handle_connection(
+        &self,
+        stream: UnixStream,
+        shutdown: &mut tokio::sync::watch::Receiver<bool>,
+    ) -> Result<(), String> {
         let (reader, mut writer) = stream.into_split();
         let mut reader = BufReader::new(reader);
         let mut line = String::new();
 
         loop {
             line.clear();
-            match reader.read_line(&mut line).await {
-                Ok(0) => {
-                    eprintln!("[daemon] Client disconnected");
+            tokio::select! {
+                result = reader.read_line(&mut line) => {
+                    match result {
+                        Ok(0) => {
+                            eprintln!("[daemon] Client disconnected");
+                            break;
+                        }
+                        Ok(_) => {
+                            let trimmed = line.trim();
+                            if trimmed.is_empty() { continue; }
+
+                            eprintln!("[daemon] ← {trimmed}");
+
+                            let response = self.handle_request(trimmed).await;
+                            let json = serde_json::to_string(&response)
+                                .unwrap_or_else(|_| r#"{"type":"error","id":"?","message":"serialize failed"}"#.into())
+                                + "\n";
+
+                            eprintln!("[daemon] → {}", json.trim());
+
+                            writer.write_all(json.as_bytes()).await
+                                .map_err(|e| format!("Write failed: {e}"))?;
+                        }
+                        Err(e) => {
+                            return Err(format!("Read error: {e}"));
+                        }
+                    }
+                }
+                _ = shutdown.changed() => {
+                    eprintln!("[daemon] Shutdown — closing connection");
                     break;
-                }
-                Ok(_) => {
-                    let trimmed = line.trim();
-                    if trimmed.is_empty() { continue; }
-
-                    eprintln!("[daemon] ← {trimmed}");
-
-                    let response = self.handle_request(trimmed).await;
-                    let json = serde_json::to_string(&response)
-                        .unwrap_or_else(|_| r#"{"type":"error","id":"?","message":"serialize failed"}"#.into())
-                        + "\n";
-
-                    eprintln!("[daemon] → {}", json.trim());
-
-                    writer.write_all(json.as_bytes()).await
-                        .map_err(|e| format!("Write failed: {e}"))?;
-                }
-                Err(e) => {
-                    return Err(format!("Read error: {e}"));
                 }
             }
         }
