@@ -208,10 +208,11 @@ impl SshPool {
             Request::GetActiveApp =>
                 "~/bin/zb-agent app".into(),
 
-            Request::RunCommand { cmd } =>
-                format!("~/bin/zb-agent run '{}'",
-                    cmd.replace('\'', "'\\''")  // escape single quotes
-                ),
+            Request::RunCommand { cmd } => {
+                // Pass command as argument — zb-agent run wraps in JSON
+                let escaped = cmd.replace('\'', "'\\''");
+                format!("~/bin/zb-agent run '{}'", escaped)
+            }
         }
     }
 
@@ -221,7 +222,7 @@ impl SshPool {
         match req {
             Request::GetCursor => {
                 let v: serde_json::Value = serde_json::from_str(&output)
-                    .map_err(|e| format!("Parse cursor failed: {} — raw: {}", e, output))?;
+                    .map_err(|e| format!("Parse cursor failed: {} — raw: {}", e, &output[..output.len().min(100)]))?;
                 Ok(Response::CursorPos {
                     x: v["x"].as_f64().unwrap_or(0.0),
                     y: v["y"].as_f64().unwrap_or(0.0),
@@ -230,7 +231,7 @@ impl SshPool {
 
             Request::GetScreens => {
                 let v: serde_json::Value = serde_json::from_str(&output)
-                    .map_err(|e| format!("Parse screens failed: {} — raw: {}", e, output))?;
+                    .map_err(|e| format!("Parse screens failed: {} — raw: {}", e, &output[..output.len().min(100)]))?;
                 let layout = v["layout"].as_array()
                     .ok_or("Missing layout field")?
                     .iter()
@@ -245,20 +246,49 @@ impl SshPool {
                 Ok(Response::Screens { layout })
             }
 
-            Request::GetClipboard =>
-                Ok(Response::Clipboard { text: output }),
+            Request::GetClipboard => {
+                // zb-agent clipboard returns JSON wrapper
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&output) {
+                    Ok(Response::Clipboard {
+                        text: v["text"].as_str().unwrap_or(&output).to_string(),
+                    })
+                } else {
+                    // Fallback — treat as plain text
+                    Ok(Response::Clipboard { text: output })
+                }
+            }
 
-            Request::GetActiveApp =>
-                Ok(Response::ActiveApp {
-                    name:   output,
-                    window: String::new(),
-                }),
+            Request::GetActiveApp => {
+                // zb-agent app returns JSON wrapper
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&output) {
+                    Ok(Response::ActiveApp {
+                        name:   v["name"].as_str().unwrap_or("").to_string(),
+                        window: v["bundle"].as_str().unwrap_or("").to_string(),
+                    })
+                } else {
+                    // Fallback — treat as plain app name
+                    Ok(Response::ActiveApp {
+                        name:   output,
+                        window: String::new(),
+                    })
+                }
+            }
 
-            Request::RunCommand { .. } =>
-                Ok(Response::CommandResult {
-                    output,
-                    error: String::new(),
-                }),
+            Request::RunCommand { .. } => {
+                // zb-agent run returns JSON with output + exit_code
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&output) {
+                    Ok(Response::CommandResult {
+                        output: v["output"].as_str().unwrap_or("").to_string(),
+                        error:  v["error"].as_str().unwrap_or("").to_string(),
+                    })
+                } else {
+                    // Fallback — plain output
+                    Ok(Response::CommandResult {
+                        output,
+                        error: String::new(),
+                    })
+                }
+            }
         }
     }
 }

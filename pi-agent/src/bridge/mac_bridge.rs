@@ -9,9 +9,9 @@ use crate::serial::protocol::{Request, Response};
 const HEALTH_INTERVAL_SECS: u64 = 30;
 
 pub struct MacBridge {
-    serial: Arc<SerialQueue>,
-    ssh_usb: Arc<SshPool>,
-    ssh_wifi: Arc<SshPool>,
+    pub serial: Arc<SerialQueue>,
+    pub ssh_usb: Arc<SshPool>,
+    pub ssh_wifi: Arc<SshPool>,
 }
 
 impl MacBridge {
