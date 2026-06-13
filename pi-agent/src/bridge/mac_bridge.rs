@@ -130,6 +130,15 @@ impl MacBridge {
         let ws       = self.ws.clone();
 
         tokio::spawn(async move {
+            // Initial probe shortly after startup so status reflects reality fast
+            sleep(Duration::from_secs(3)).await;
+            eprintln!("[health] Initial channel probe...");
+            if let Some(ws) = &ws {
+                ws.check_health().await;
+            }
+            ssh_usb.check_health().await;
+            ssh_wifi.check_health().await;
+
             loop {
                 sleep(Duration::from_secs(HEALTH_INTERVAL_SECS)).await;
                 eprintln!("[health] Checking channels...");

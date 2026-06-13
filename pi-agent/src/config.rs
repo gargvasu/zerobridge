@@ -76,16 +76,30 @@ fn config_paths() -> Vec<PathBuf> {
         PathBuf::from("/etc/zerobridge/config.toml"),
     ];
 
+    // Standard: $HOME (works for systemd with Environment=HOME=...)
     if let Ok(home) = std::env::var("HOME") {
-        paths.insert(1, PathBuf::from(format!("{home}/.config/zerobridge/config.toml")));
+        let p = PathBuf::from(format!("{home}/.config/zerobridge/config.toml"));
+        if !paths.contains(&p) {
+            paths.insert(1, p);
+        }
     }
 
+    // dirs crate: follows /etc/passwd for the real uid (works normally)
     if let Some(home) = dirs::home_dir() {
         let p = home.join(".config/zerobridge/config.toml");
         if !paths.contains(&p) {
             paths.insert(2, p);
         }
     }
+
+    // sudo: SUDO_USER tells us the real user even when HOME=/root
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        let p = PathBuf::from(format!("/home/{sudo_user}/.config/zerobridge/config.toml"));
+        if !paths.contains(&p) {
+            paths.push(p);
+        }
+    }
+
     eprintln!("[config] Searching paths: {:?}", paths);
     paths
 }
