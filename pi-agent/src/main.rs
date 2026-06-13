@@ -49,6 +49,7 @@ async fn main() {
     }
 
     // Cleanup
-    let _ = std::fs::remove_file("/tmp/zerobridge.sock");
+    let sock = std::env::var("ZB_SOCK").unwrap_or_else(|_| "/tmp/zerobridge.sock".to_string());
+    let _ = std::fs::remove_file(&sock);
     eprintln!("[zerobridge] Shutdown complete");
 }

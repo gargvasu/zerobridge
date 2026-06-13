@@ -64,7 +64,7 @@ pub struct WebSocketConfig {
 impl Default for WebSocketConfig {
     fn default() -> Self {
         WebSocketConfig {
-            url: "ws://169.254.206.1:8082".to_string(),
+            url: "ws://mac.hid:8082".to_string(),
             timeout_ms: 2000,
         }
     }
@@ -77,7 +77,7 @@ fn config_paths() -> Vec<PathBuf> {
     ];
 
     if let Ok(home) = std::env::var("HOME") {
-        paths.insert(1, PathBuf::from(format!("{}/.config/zerobridge/config.toml", home)));
+        paths.insert(1, PathBuf::from(format!("{home}/.config/zerobridge/config.toml")));
     }
 
     if let Some(home) = dirs::home_dir() {
@@ -86,8 +86,6 @@ fn config_paths() -> Vec<PathBuf> {
             paths.insert(2, p);
         }
     }
-    paths.push(PathBuf::from("/home/vasugarg/.config/zerobridge/config.toml"));
-
     eprintln!("[config] Searching paths: {:?}", paths);
     paths
 }
@@ -98,8 +96,8 @@ impl Config {
             if path.exists() {
                 eprintln!("[config] Loading from {}", path.display());
                 let content =
-                    std::fs::read_to_string(&path).map_err(|e| format!("Read failed: {}", e))?;
-                return toml::from_str(&content).map_err(|e| format!("Parse failed: {}", e));
+                    std::fs::read_to_string(&path).map_err(|e| format!("Read failed: {e}"))?;
+                return toml::from_str(&content).map_err(|e| format!("Parse failed: {e}"));
             }
         }
         eprintln!("[config] No config file found — using defaults");
@@ -139,6 +137,6 @@ media    = "/dev/hidg2"
 mode = "hybrid"
 
 [websocket]
-url        = "ws://169.254.206.1:8082"
+url        = "ws://mac.hid:8082"
 timeout_ms = 2000
 "#;

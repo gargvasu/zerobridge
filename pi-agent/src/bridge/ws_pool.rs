@@ -52,12 +52,11 @@ impl WsPool {
 
         let (ws_stream, _) = tokio_tungstenite::connect_async(&self.url)
             .await
-            .map_err(|e| format!("WebSocket connect failed: {}", e))?;
+            .map_err(|e| format!("WebSocket connect failed: {e}"))?;
 
         let (write, read) = ws_stream.split();
         let ws_sink: WsSink = Arc::new(Mutex::new(write));
 
-        // Store the sink
         {
             let mut guard = self.sink.lock().await;
             *guard = Some(ws_sink.clone());
@@ -66,9 +65,8 @@ impl WsPool {
         self.healthy.store(true, Ordering::Relaxed);
         eprintln!("[ws] ✅ Connected to {}", self.url);
 
-        // Spawn read loop
-        let pending = self.pending.clone();
-        let healthy = self.healthy.clone();
+        let pending  = self.pending.clone();
+        let healthy  = self.healthy.clone();
         let sink_ref = self.sink.clone();
 
         tokio::spawn(async move {
@@ -106,7 +104,7 @@ impl WsPool {
                             }
                         }
                         Err(e) => {
-                            eprintln!("[ws] Parse error: {} — raw: {}", e, &text[..text.len().min(100)]);
+                            eprintln!("[ws] Parse error: {e} — raw: {}", &text[..text.len().min(100)]);
                         }
                     }
                 }
@@ -115,14 +113,13 @@ impl WsPool {
                     break;
                 }
                 Ok(Message::Ping(data)) => {
-                    // Respond with pong
                     if let Some(ws_sink) = &*sink.lock().await {
                         let _ = ws_sink.lock().await.send(Message::Pong(data)).await;
                     }
                 }
-                Ok(_) => {} // Ignore binary, pong, etc.
+                Ok(_) => {}
                 Err(e) => {
-                    eprintln!("[ws] Read error: {}", e);
+                    eprintln!("[ws] Read error: {e}");
                     break;
                 }
             }
@@ -130,7 +127,6 @@ impl WsPool {
 
         eprintln!("[ws] Read loop ended — marking unhealthy");
         healthy.store(false, Ordering::Relaxed);
-        // Clear the sink so next request triggers reconnect
         *sink.lock().await = None;
     }
 
@@ -148,43 +144,30 @@ impl WsPool {
 
         let id = uuid::Uuid::new_v4().to_string();
 
-        let envelope = RequestEnvelope {
-            id: id.clone(),
-            request: req,
-        };
+        let envelope = RequestEnvelope { id: id.clone(), request: req };
 
         let json = serde_json::to_string(&envelope)
-            .map_err(|e| format!("Serialize error: {}", e))?;
+            .map_err(|e| format!("Serialize error: {e}"))?;
 
         eprintln!("[ws] → ({} bytes) {}", json.len(), &json[..json.len().min(120)]);
 
-        // Register pending response
         let (tx, rx) = oneshot::channel();
         self.pending.lock().await.insert(id.clone(), tx);
 
-        // Send over WebSocket
         {
             let guard = self.sink.lock().await;
-            match &*guard {
-                Some(ws_sink) => {
-                    ws_sink
-                        .lock()
-                        .await
-                        .send(Message::Text(json))
-                        .await
-                        .map_err(|e| {
-                            self.healthy.store(false, Ordering::Relaxed);
-                            format!("WebSocket send failed: {}", e)
-                        })?;
-                }
-                None => {
+            if let Some(ws_sink) = &*guard {
+                if let Err(e) = ws_sink.lock().await.send(Message::Text(json)).await {
+                    self.healthy.store(false, Ordering::Relaxed);
                     self.pending.lock().await.remove(&id);
-                    return Err("WebSocket not connected".into());
+                    return Err(format!("WebSocket send failed: {e}"));
                 }
+            } else {
+                self.pending.lock().await.remove(&id);
+                return Err("WebSocket not connected".into());
             }
         }
 
-        // Wait for response with timeout
         match timeout(Duration::from_millis(self.timeout_ms), rx).await {
             Ok(Ok(response)) => Ok(response),
             Ok(Err(_)) => {
@@ -201,31 +184,40 @@ impl WsPool {
     pub async fn check_health(&self) {
         self.checked.store(true, Ordering::Relaxed);
 
-        // Drop existing connection
+        // If already healthy, probe without dropping the connection
+        if self.is_healthy() {
+            match self.request(Request::GetCursor).await {
+                Ok(_) => {
+                    eprintln!("[ws] {} ✅ healthy (probe)", self.url);
+                    return;
+                }
+                Err(e) => {
+                    eprintln!("[ws] {} probe failed: {e} — reconnecting", self.url);
+                }
+            }
+        }
+
+        // Drop and reconnect
         {
             let mut guard = self.sink.lock().await;
             *guard = None;
             self.healthy.store(false, Ordering::Relaxed);
         }
 
-        // Try to reconnect and send a ping
         match self.connect().await {
-            Ok(_) => {
-                // Test with a cursor request (fast, lightweight)
-                match self.request(Request::GetCursor).await {
-                    Ok(_) => {
-                        self.healthy.store(true, Ordering::Relaxed);
-                        eprintln!("[ws] {} ✅ healthy", self.url);
-                    }
-                    Err(e) => {
-                        self.healthy.store(false, Ordering::Relaxed);
-                        eprintln!("[ws] {} ❌ unhealthy: {}", self.url, e);
-                        *self.sink.lock().await = None;
-                    }
+            Ok(()) => match self.request(Request::GetCursor).await {
+                Ok(_) => {
+                    self.healthy.store(true, Ordering::Relaxed);
+                    eprintln!("[ws] {} ✅ healthy", self.url);
                 }
-            }
+                Err(e) => {
+                    self.healthy.store(false, Ordering::Relaxed);
+                    eprintln!("[ws] {} ❌ unhealthy: {e}", self.url);
+                    *self.sink.lock().await = None;
+                }
+            },
             Err(e) => {
-                eprintln!("[ws] {} ❌ connect failed: {}", self.url, e);
+                eprintln!("[ws] {} ❌ connect failed: {e}", self.url);
             }
         }
     }

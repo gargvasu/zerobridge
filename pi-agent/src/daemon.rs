@@ -10,7 +10,9 @@ use crate::hid::mouse::Mouse;
 use crate::ipc::{IpcRequest, IpcResponse};
 use crate::serial::protocol::Request as BridgeRequest;
 
-const SOCKET_PATH: &str = "/tmp/zerobridge.sock";
+fn socket_path() -> String {
+    std::env::var("ZB_SOCK").unwrap_or_else(|_| "/tmp/zerobridge.sock".to_string())
+}
 
 pub struct Daemon {
     bridge:   Arc<MacBridge>,
@@ -22,16 +24,16 @@ pub struct Daemon {
 impl Daemon {
     pub async fn new(config: Config) -> Result<Self, String> {
         let bridge = MacBridge::new(config.clone()).await
-            .map_err(|e| format!("Bridge init failed: {}", e))?;
+            .map_err(|e| format!("Bridge init failed: {e}"))?;
 
         let keyboard = Keyboard::new(&config.hid)
-            .map_err(|e| format!("Keyboard init failed: {}", e))?;
+            .map_err(|e| format!("Keyboard init failed: {e}"))?;
 
         let mouse = Mouse::new(&config.hid)
-            .map_err(|e| format!("Mouse init failed: {}", e))?;
+            .map_err(|e| format!("Mouse init failed: {e}"))?;
 
         let media = Media::new(&config.hid)
-            .map_err(|e| format!("Media init failed: {}", e))?;
+            .map_err(|e| format!("Media init failed: {e}"))?;
 
         Ok(Daemon {
             bridge:   Arc::new(bridge),
@@ -42,21 +44,19 @@ impl Daemon {
     }
 
     pub async fn run(self) -> Result<(), String> {
-        let _ = std::fs::remove_file(SOCKET_PATH);
+        let sock = socket_path();
+        let _ = std::fs::remove_file(&sock);
 
-        let listener = UnixListener::bind(SOCKET_PATH)
-            .map_err(|e| format!("Bind {} failed: {}", SOCKET_PATH, e))?;
+        let listener = UnixListener::bind(&sock)
+            .map_err(|e| format!("Bind {sock} failed: {e}"))?;
 
-        // Set permissions — full path, no import needed
         {
             use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(
-                SOCKET_PATH,
-                std::fs::Permissions::from_mode(0o666),
-            ).map_err(|e| format!("Set permissions failed: {}", e))?;
+            std::fs::set_permissions(&sock, std::fs::Permissions::from_mode(0o666))
+                .map_err(|e| format!("Set permissions failed: {e}"))?;
         }
 
-        eprintln!("[daemon] Listening on {}", SOCKET_PATH);
+        eprintln!("[daemon] Listening on {sock}");
 
         let daemon = Arc::new(self);
 
@@ -67,12 +67,12 @@ impl Daemon {
                     let d = daemon.clone();
                     tokio::spawn(async move {
                         if let Err(e) = d.handle_connection(stream).await {
-                            eprintln!("[daemon] Connection error: {}", e);
+                            eprintln!("[daemon] Connection error: {e}");
                         }
                     });
                 }
                 Err(e) => {
-                    eprintln!("[daemon] Accept error: {}", e);
+                    eprintln!("[daemon] Accept error: {e}");
                 }
             }
         }
@@ -94,7 +94,7 @@ impl Daemon {
                     let trimmed = line.trim();
                     if trimmed.is_empty() { continue; }
 
-                    eprintln!("[daemon] ← {}", trimmed);
+                    eprintln!("[daemon] ← {trimmed}");
 
                     let response = self.handle_request(trimmed).await;
                     let json = serde_json::to_string(&response)
@@ -104,10 +104,10 @@ impl Daemon {
                     eprintln!("[daemon] → {}", json.trim());
 
                     writer.write_all(json.as_bytes()).await
-                        .map_err(|e| format!("Write failed: {}", e))?;
+                        .map_err(|e| format!("Write failed: {e}"))?;
                 }
                 Err(e) => {
-                    return Err(format!("Read error: {}", e));
+                    return Err(format!("Read error: {e}"));
                 }
             }
         }
@@ -115,15 +115,16 @@ impl Daemon {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn handle_request(&self, raw: &str) -> IpcResponse {
         let id = serde_json::from_str::<serde_json::Value>(raw)
             .ok()
-            .and_then(|v| v["id"].as_str().map(|s| s.to_string()))
+            .and_then(|v| v["id"].as_str().map(ToString::to_string))
             .unwrap_or_else(|| "?".to_string());
 
         let req = match serde_json::from_str::<IpcRequest>(raw) {
             Ok(r) => r,
-            Err(e) => return IpcResponse::error(&id, &format!("Parse error: {}", e)),
+            Err(e) => return IpcResponse::error(&id, &format!("Parse error: {e}")),
         };
 
         match req {
@@ -184,9 +185,7 @@ impl Daemon {
             }
 
             IpcRequest::GetWindowForApp { app } => {
-                match self.bridge.request(BridgeRequest::GetWindowForApp {
-                    app: app.clone()
-                }).await {
+                match self.bridge.request(BridgeRequest::GetWindowForApp { app }).await {
                     Ok(crate::serial::protocol::Response::Window { info }) =>
                         IpcResponse::Window { id, info },
                     Ok(_) => IpcResponse::error(&id, "Unexpected response"),
@@ -195,9 +194,7 @@ impl Daemon {
             }
 
             IpcRequest::FocusApp { app } => {
-                match self.bridge.request(BridgeRequest::FocusApp {
-                    app: app.clone()
-                }).await {
+                match self.bridge.request(BridgeRequest::FocusApp { app }).await {
                     Ok(crate::serial::protocol::Response::FocusResult { app, success }) =>
                         IpcResponse::FocusResult { id, app, success },
                     Ok(_) => IpcResponse::error(&id, "Unexpected response"),
@@ -210,28 +207,28 @@ impl Daemon {
             IpcRequest::Key { code, modifiers } => {
                 let mut kb = self.keyboard.lock().await;
                 let parts: Vec<&str> = modifiers.iter()
-                    .map(|s| s.as_str())
+                    .map(String::as_str)
                     .chain(std::iter::once(code.as_str()))
                     .collect();
                 match kb.combo(&parts).await {
-                    Ok(_)  => IpcResponse::ok(&id),
-                    Err(e) => IpcResponse::error(&id, &format!("{:?}", e)),
+                    Ok(())  => IpcResponse::ok(&id),
+                    Err(e) => IpcResponse::error(&id, &format!("{e:?}")),
                 }
             }
 
             IpcRequest::TypeText { text } => {
                 let mut kb = self.keyboard.lock().await;
                 match kb.type_text(&text).await {
-                    Ok(_)  => IpcResponse::ok(&id),
-                    Err(e) => IpcResponse::error(&id, &format!("{:?}", e)),
+                    Ok(())  => IpcResponse::ok(&id),
+                    Err(e) => IpcResponse::error(&id, &format!("{e:?}")),
                 }
             }
 
             IpcRequest::TypeSmart { text } => {
                 let mut kb = self.keyboard.lock().await;
                 match kb.type_smart(&text).await {
-                    Ok(_)  => IpcResponse::ok(&id),
-                    Err(e) => IpcResponse::error(&id, &format!("{:?}", e)),
+                    Ok(())  => IpcResponse::ok(&id),
+                    Err(e) => IpcResponse::error(&id, &format!("{e:?}")),
                 }
             }
 
@@ -248,8 +245,8 @@ impl Daemon {
             IpcRequest::MouseMove { dx, dy } => {
                 let mut m = self.mouse.lock().await;
                 match m.move_large(dx, dy).await {
-                    Ok(_)  => IpcResponse::ok(&id),
-                    Err(e) => IpcResponse::error(&id, &format!("{:?}", e)),
+                    Ok(())  => IpcResponse::ok(&id),
+                    Err(e) => IpcResponse::error(&id, &format!("{e:?}")),
                 }
             }
 
@@ -261,16 +258,16 @@ impl Daemon {
                     _        => m.click().await,
                 };
                 match result {
-                    Ok(_)  => IpcResponse::ok(&id),
-                    Err(e) => IpcResponse::error(&id, &format!("{:?}", e)),
+                    Ok(())  => IpcResponse::ok(&id),
+                    Err(e) => IpcResponse::error(&id, &format!("{e:?}")),
                 }
             }
 
             IpcRequest::MouseScroll { delta } => {
                 let mut m = self.mouse.lock().await;
                 match m.scroll_smooth(delta, 5).await {
-                    Ok(_)  => IpcResponse::ok(&id),
-                    Err(e) => IpcResponse::error(&id, &format!("{:?}", e)),
+                    Ok(())  => IpcResponse::ok(&id),
+                    Err(e) => IpcResponse::error(&id, &format!("{e:?}")),
                 }
             }
 
@@ -288,13 +285,12 @@ impl Daemon {
                     "brightness_up"   => media.brightness_up().await,
                     "brightness_down" => media.brightness_down().await,
                     unknown => {
-                        return IpcResponse::error(&id,
-                            &format!("Unknown media key: {}", unknown));
+                        return IpcResponse::error(&id, &format!("Unknown media key: {unknown}"));
                     }
                 };
                 match result {
-                    Ok(_)  => IpcResponse::ok(&id),
-                    Err(e) => IpcResponse::error(&id, &format!("{:?}", e)),
+                    Ok(())  => IpcResponse::ok(&id),
+                    Err(e) => IpcResponse::error(&id, &format!("{e:?}")),
                 }
             }
 

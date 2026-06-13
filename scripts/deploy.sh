@@ -3,15 +3,18 @@ set -e
 
 # ── Usage ─────────────────────────────────────────
 # ./scripts/deploy.sh [host] [user]
-# 
+#
 # Environment variables:
 #   PI_HOST  — Pi Zero IP or hostname (default: 169.254.206.2)
 #   PI_USER  — Pi Zero username       (default: pi)
 #
-# Examples:
-#   ./scripts/deploy.sh
-#   ./scripts/deploy.sh 192.168.0.123
-#   PI_HOST=raspberrypizero.local PI_USER=vasugarg ./scripts/deploy.sh
+# What this does:
+#   1. Copies pi-agent binary as ~/pi-agent-new  (does NOT restart anything)
+#   2. Copies service files and scripts
+#   3. Leaves systemd pi-agent service untouched
+#
+# After verifying with the test daemon, run:
+#   ./scripts/activate.sh [host] [user]
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -28,88 +31,43 @@ fail() { echo -e "${RED}❌ $1${NC}"; exit 1; }
 BINARY="$REPO_DIR/pi-agent/target/arm-unknown-linux-gnueabihf/release/pi-agent"
 
 echo "═══════════════════════════════════════"
-echo "  ZeroBridge — Deploy"
+echo "  ZeroBridge — Deploy (safe, no restart)"
 echo "  Host: $PI_USER@$PI_HOST"
 echo "═══════════════════════════════════════"
 echo ""
 
-# ── Check binary exists ───────────────────────────
 [ -f "$BINARY" ] || fail "Binary not found — run ./scripts/build.sh first"
 
-# ── Copy binary ───────────────────────────────────
-info "Copying pi-agent to $PI_USER@$PI_HOST..."
+info "Copying pi-agent binary as pi-agent-new..."
 scp "$BINARY" "$PI_USER@$PI_HOST:~/pi-agent-new"
-ok "Binary copied"
+ok "Binary staged at ~/pi-agent-new (systemd service untouched)"
 
-# ── Copy service files ────────────────────────────
-info "Copying systemd service files..."
-scp "$REPO_DIR/systemd/pi-agent.service" \
-    "$PI_USER@$PI_HOST:~/pi-agent.service"
-scp "$REPO_DIR/systemd/multi-hid-setup.service" \
-    "$PI_USER@$PI_HOST:~/multi-hid-setup.service"
-ok "Service files copied"
+info "Copying service files..."
+scp "$REPO_DIR/systemd/pi-agent.service"        "$PI_USER@$PI_HOST:~/pi-agent.service"
+scp "$REPO_DIR/systemd/mac-hid-setup.service"   "$PI_USER@$PI_HOST:~/mac-hid-setup.service"
+ok "Service files staged"
 
-# ── Copy scripts ──────────────────────────────────
 info "Copying scripts..."
-scp "$REPO_DIR/scripts/multi-hid-setup.sh" \
-    "$PI_USER@$PI_HOST:~/multi-hid-setup.sh"
-ok "Scripts copied"
+scp "$REPO_DIR/scripts/multi-hid-setup.sh" "$PI_USER@$PI_HOST:~/multi-hid-setup.sh"
+scp "$REPO_DIR/config/config.toml.example" "$PI_USER@$PI_HOST:~/config.toml.example"
+ok "Scripts and config example staged"
 
-# ── Copy config example ───────────────────────────
-scp "$REPO_DIR/config/config.toml.example" \
-    "$PI_USER@$PI_HOST:~/config.toml.example"
-
-# ── Install remotely ──────────────────────────────
-info "Installing on Pi Zero..."
-ssh "$PI_USER@$PI_HOST" "sudo bash -s" << REMOTE
-set -e
-
-# Binary
-mv ~/pi-agent-new /usr/local/bin/pi-agent
-chmod +x /usr/local/bin/pi-agent
-
-# HID setup script
-mv ~/multi-hid-setup.sh /usr/local/bin/multi-hid-setup.sh
-chmod +x /usr/local/bin/multi-hid-setup.sh
-
-# Service files
-mv ~/pi-agent.service /etc/systemd/system/pi-agent.service
-mv ~/multi-hid-setup.service /etc/systemd/system/multi-hid-setup.service
-
-# Config
-CONFIG_DIR="/home/$PI_USER/.config/zerobridge"
-mkdir -p "\$CONFIG_DIR"
-if [ ! -f "\$CONFIG_DIR/config.toml" ]; then
-    cp ~/config.toml.example "\$CONFIG_DIR/config.toml"
-    echo "⚠️  Edit \$CONFIG_DIR/config.toml before starting"
-fi
-
-# /etc/hosts
-grep -q "hid.macmini" /etc/hosts || \
-    echo "169.254.206.1   hid.macmini" >> /etc/hosts
-
-# Systemd
-systemctl daemon-reload
-systemctl enable multi-hid-setup.service
-systemctl enable pi-agent.service
-
-# Restart if already running otherwise start
-if systemctl is-active --quiet pi-agent; then
-    systemctl restart pi-agent
-    echo "✅ pi-agent restarted"
-else
-    systemctl start pi-agent || true
-    echo "✅ pi-agent started"
-fi
-REMOTE
-
-ok "Deploy complete!"
 echo ""
 echo "═══════════════════════════════════════"
-echo "Check status:"
-echo "  ssh $PI_USER@$PI_HOST 'systemctl status pi-agent'"
-echo "  ssh $PI_USER@$PI_HOST 'journalctl -u pi-agent -f'"
+ok "Deploy staged — systemd pi-agent NOT restarted"
 echo ""
-echo "Test socket:"
-echo "  ssh $PI_USER@$PI_HOST 'echo {\"id\":\"1\",\"type\":\"ping\"} | nc -q 1 -U /tmp/zerobridge.sock'"
+echo "Next — test the new binary manually:"
+echo ""
+echo "  1. SSH in:"
+echo "     ssh $PI_USER@$PI_HOST"
+echo ""
+echo "  2. Stop systemd daemon and run test daemon on a different socket:"
+echo "     sudo systemctl stop pi-agent"
+echo "     ZB_SOCK=/tmp/zb-test.sock ~/pi-agent-new"
+echo ""
+echo "  3. From another terminal, run tests:"
+echo "     echo '{\"id\":\"1\",\"type\":\"ping\"}' | nc -q 1 -U /tmp/zb-test.sock"
+echo ""
+echo "  4. When satisfied, activate:"
+echo "     ./scripts/activate.sh $PI_USER@$PI_HOST"
 echo "═══════════════════════════════════════"

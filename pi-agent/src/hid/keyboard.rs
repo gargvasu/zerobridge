@@ -38,7 +38,7 @@ impl Keyboard {
         if let Some((keycode, modifier)) = name_to_hid(name) {
             self.tap(modifier, keycode).await
         } else if name.len() == 1 {
-            self.type_char(name.chars().next().unwrap()).await
+            self.type_char(name.chars().next().expect("len==1")).await
         } else {
             eprintln!("[WARN] Unknown key: {}", name);
             Ok(())
@@ -56,7 +56,7 @@ impl Keyboard {
                 keycode = Some(kc);
                 modifier |= extra_mod;
             } else if k.len() == 1 {
-                if let Some((kc, extra_mod)) = char_to_hid(k.chars().next().unwrap()) {
+                if let Some((kc, extra_mod)) = char_to_hid(k.chars().next().expect("len==1")) {
                     keycode = Some(kc);
                     modifier |= extra_mod;
                 }

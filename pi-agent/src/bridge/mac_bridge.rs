@@ -21,9 +21,8 @@ impl MacBridge {
     pub async fn new(config: Config) -> Result<Self, String> {
         let serial = SerialQueue::new(&config.serial)
             .await
-            .map_err(|e| format!("Serial init failed: {}", e))?;
+            .map_err(|e| format!("Serial init failed: {e}"))?;
 
-        // Initialize WebSocket pool if mode uses it
         let ws = match config.bridge.mode.as_str() {
             "websocket" | "hybrid" => {
                 eprintln!("[bridge] Initializing WebSocket pool → {}", config.websocket.url);
@@ -43,7 +42,6 @@ impl MacBridge {
             mode: config.bridge.mode.clone(),
         };
 
-        // Spawn background health monitor
         bridge.spawn_health_monitor();
 
         eprintln!("[bridge] Mode: {}", bridge.mode);
@@ -55,27 +53,14 @@ impl MacBridge {
 
     pub async fn request(&self, req: Request) -> Result<Response, String> {
         match self.mode.as_str() {
-            "websocket" => {
-                // WebSocket for everything, fallback to SSH
-                self.ws_with_fallback(req).await
-            }
-            "serial" => {
-                // Legacy serial-first routing
-                match &req {
-                    Request::GetCursor | Request::GetScreens | Request::GetActiveApp => {
-                        self.serial_with_fallback(req).await
-                    }
-                    _ => self.ssh_with_fallback(req).await,
+            "serial" => match &req {
+                Request::GetCursor | Request::GetScreens | Request::GetActiveApp => {
+                    self.serial_with_fallback(req).await
                 }
-            }
-            "ssh" => {
-                // SSH only
-                self.ssh_with_fallback(req).await
-            }
-            "hybrid" | _ => {
-                // WebSocket primary for all queries, SSH fallback
-                self.ws_with_fallback(req).await
-            }
+                _ => self.ssh_with_fallback(req).await,
+            },
+            "ssh" => self.ssh_with_fallback(req).await,
+            _ => self.ws_with_fallback(req).await, // "websocket", "hybrid", default
         }
     }
 
@@ -90,12 +75,11 @@ impl MacBridge {
                         return Ok(resp);
                     }
                     Err(e) => {
-                        eprintln!("[bridge] ⚠ websocket failed: {} — trying SSH", e);
+                        eprintln!("[bridge] ⚠ websocket failed: {e} — trying SSH");
                     }
                 }
             }
         }
-        // Fallback to SSH
         self.ssh_with_fallback(req).await
     }
 
@@ -106,14 +90,13 @@ impl MacBridge {
                 Ok(resp)
             }
             Err(e) => {
-                eprintln!("[bridge] ⚠ serial failed: {} — trying SSH", e);
+                eprintln!("[bridge] ⚠ serial failed: {e} — trying SSH");
                 self.ssh_with_fallback(req).await
             }
         }
     }
 
     async fn ssh_with_fallback(&self, req: Request) -> Result<Response, String> {
-        // Try USB tether first
         if self.ssh_usb.should_try() {
             match self.ssh_usb.request(req.clone()).await {
                 Ok(resp) => {
@@ -121,12 +104,11 @@ impl MacBridge {
                     return Ok(resp);
                 }
                 Err(e) => {
-                    eprintln!("[bridge] ⚠ ssh_usb failed: {}", e);
+                    eprintln!("[bridge] ⚠ ssh_usb failed: {e}");
                 }
             }
         }
 
-        // Fallback to WiFi
         eprintln!("[bridge] trying ssh_wifi...");
         match self.ssh_wifi.request(req).await {
             Ok(resp) => {
@@ -134,8 +116,8 @@ impl MacBridge {
                 Ok(resp)
             }
             Err(e) => {
-                eprintln!("[bridge] ❌ all channels failed: {}", e);
-                Err(format!("All channels failed: {}", e))
+                eprintln!("[bridge] ❌ all channels failed: {e}");
+                Err(format!("All channels failed: {e}"))
             }
         }
     }
@@ -143,14 +125,13 @@ impl MacBridge {
     // ── Health Monitor ─────────────────────────────
 
     fn spawn_health_monitor(&self) {
-        let ssh_usb = self.ssh_usb.clone();
+        let ssh_usb  = self.ssh_usb.clone();
         let ssh_wifi = self.ssh_wifi.clone();
-        let ws = self.ws.clone();
+        let ws       = self.ws.clone();
 
         tokio::spawn(async move {
             loop {
                 sleep(Duration::from_secs(HEALTH_INTERVAL_SECS)).await;
-
                 eprintln!("[health] Checking channels...");
                 if let Some(ws) = &ws {
                     ws.check_health().await;
@@ -165,7 +146,7 @@ impl MacBridge {
 
     pub fn status(&self) -> BridgeStatus {
         BridgeStatus {
-            ws_healthy:       self.ws.as_ref().map(|w| w.is_healthy()).unwrap_or(false),
+            ws_healthy:       self.ws.as_ref().is_some_and(|w| w.is_healthy()),
             ssh_usb_healthy:  self.ssh_usb.is_healthy(),
             ssh_wifi_healthy: self.ssh_wifi.is_healthy(),
         }

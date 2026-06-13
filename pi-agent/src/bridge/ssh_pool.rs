@@ -38,43 +38,36 @@ impl SshConnection {
             ..<_>::default()
         });
 
-        let mut handle = client::connect(
-            client_config,
-            (host, config.port),
-            ClientHandler,
-        )
-        .await
-        .map_err(|e| format!("SSH connect to {} failed: {}", host, e))?;
+        let mut handle = client::connect(client_config, (host, config.port), ClientHandler)
+            .await
+            .map_err(|e| format!("SSH connect to {host} failed: {e}"))?;
 
         let key = load_secret_key(&config.key, None)
-            .map_err(|e| format!("Load key {} failed: {}", config.key, e))?;
+            .map_err(|e| format!("Load key {} failed: {e}", config.key))?;
 
         let auth_res = handle
             .authenticate_publickey(&config.user, Arc::new(key))
             .await
-            .map_err(|e| format!("Auth failed: {}", e))?;
+            .map_err(|e| format!("Auth failed: {e}"))?;
 
         if !auth_res {
-            return Err(format!("SSH auth rejected for {}", host));
+            return Err(format!("SSH auth rejected for {host}"));
         }
 
-        eprintln!("[ssh] ✅ Connected to {}", host);
+        eprintln!("[ssh] ✅ Connected to {host}");
 
-        Ok(SshConnection {
-            handle,
-            host: host.to_string(),
-        })
+        Ok(SshConnection { handle, host: host.to_string() })
     }
 
     pub async fn exec(&mut self, cmd: &str) -> Result<String, String> {
         let mut channel = self.handle
             .channel_open_session()
             .await
-            .map_err(|e| format!("Channel open failed: {}", e))?;
+            .map_err(|e| format!("Channel open failed: {e}"))?;
 
         channel.exec(true, cmd)
             .await
-            .map_err(|e| format!("Exec '{}' failed: {}", cmd, e))?;
+            .map_err(|e| format!("Exec '{cmd}' failed: {e}"))?;
 
         let mut output = Vec::new();
 
@@ -85,7 +78,7 @@ impl SshConnection {
                 }
                 Some(russh::ChannelMsg::ExitStatus { exit_status }) => {
                     if exit_status != 0 {
-                        eprintln!("[ssh] command exited with status {}", exit_status);
+                        eprintln!("[ssh] command exited with status {exit_status}");
                     }
                     break;
                 }
@@ -95,13 +88,6 @@ impl SshConnection {
         }
 
         Ok(String::from_utf8_lossy(&output).trim().to_string())
-    }
-
-    pub async fn is_healthy(&mut self) -> bool {
-        self.exec("echo ok")
-            .await
-            .map(|o| o.trim() == "ok")
-            .unwrap_or(false)
     }
 }
 
@@ -156,25 +142,24 @@ impl SshPool {
         self.ensure_connected().await?;
 
         let mut guard = self.conn.lock().await;
-        let conn = guard.as_mut().unwrap();
+        let conn = guard.as_mut().expect("ensure_connected guarantees Some");
 
         match conn.exec(cmd).await {
             Ok(output) => Ok(output),
             Err(e) if e.contains("Channel") => {
                 // Channel error — session likely stale, reconnect and retry
-                eprintln!("[ssh] {} channel error — reconnecting: {}", self.host, e);
+                eprintln!("[ssh] {} channel error — reconnecting: {e}", self.host);
                 self.healthy.store(false, Ordering::Relaxed);
                 *guard = None;
                 drop(guard);
 
-                // Reconnect
                 self.ensure_connected().await?;
                 let mut guard = self.conn.lock().await;
-                let conn = guard.as_mut().unwrap();
+                let conn = guard.as_mut().expect("just reconnected");
                 conn.exec(cmd).await
             }
             Err(e) => {
-                eprintln!("[ssh] {} exec failed: {} — resetting", self.host, e);
+                eprintln!("[ssh] {} exec failed: {e} — resetting", self.host);
                 self.healthy.store(false, Ordering::Relaxed);
                 *guard = None;
                 Err(e)
@@ -184,7 +169,7 @@ impl SshPool {
 
     pub async fn request(&self, req: Request) -> Result<Response, String> {
         let cmd = self.req_to_cmd(&req);
-        eprintln!("[ssh] → {} : {}", self.host, cmd);
+        eprintln!("[ssh] → {} : {cmd}", self.host);
         let output = self.exec(&cmd).await?;
         eprintln!("[ssh] ← {} bytes", output.len());
         self.parse_output(req, output)
@@ -193,31 +178,40 @@ impl SshPool {
     pub async fn check_health(&self) {
         self.checked.store(true, Ordering::Relaxed);
 
-        // Reset connection first — force fresh connect
+        // If already healthy, probe before dropping
+        if self.is_healthy() {
+            match self.exec("echo ok").await {
+                Ok(o) if o.trim() == "ok" => {
+                    eprintln!("[ssh] {} ✅ healthy (probe)", self.host);
+                    return;
+                }
+                _ => {
+                    eprintln!("[ssh] {} probe failed — reconnecting", self.host);
+                }
+            }
+        }
+
+        // Drop and reconnect
         {
             let mut guard = self.conn.lock().await;
             *guard = None;
             self.healthy.store(false, Ordering::Relaxed);
         }
 
-        // Try fresh connection
         match self.ensure_connected().await {
-            Ok(_) => {
-                // Test with echo
-                match self.exec("echo ok").await {
-                    Ok(o) if o.trim() == "ok" => {
-                        self.healthy.store(true, Ordering::Relaxed);
-                        eprintln!("[ssh] {} ✅ healthy", self.host);
-                    }
-                    _ => {
-                        self.healthy.store(false, Ordering::Relaxed);
-                        eprintln!("[ssh] {} ❌ unhealthy", self.host);
-                        *self.conn.lock().await = None;
-                    }
+            Ok(()) => match self.exec("echo ok").await {
+                Ok(o) if o.trim() == "ok" => {
+                    self.healthy.store(true, Ordering::Relaxed);
+                    eprintln!("[ssh] {} ✅ healthy", self.host);
                 }
-            }
+                _ => {
+                    self.healthy.store(false, Ordering::Relaxed);
+                    eprintln!("[ssh] {} ❌ unhealthy", self.host);
+                    *self.conn.lock().await = None;
+                }
+            },
             Err(e) => {
-                eprintln!("[ssh] {} ❌ connect failed: {}", self.host, e);
+                eprintln!("[ssh] {} ❌ connect failed: {e}", self.host);
             }
         }
     }
@@ -226,35 +220,22 @@ impl SshPool {
 
     fn req_to_cmd(&self, req: &Request) -> String {
         match req {
-            Request::GetCursor =>
-                "~/bin/zb-agent cursor".into(),
-
-            Request::GetScreens =>
-                "~/bin/zb-agent screens".into(),
-
-            Request::GetClipboard =>
-                "~/bin/zb-agent clipboard".into(),
-
-            Request::GetActiveApp =>
-                "~/bin/zb-agent app".into(),
+            Request::GetCursor       => "~/bin/zb-agent cursor".into(),
+            Request::GetScreens      => "~/bin/zb-agent screens".into(),
+            Request::GetClipboard    => "~/bin/zb-agent clipboard".into(),
+            Request::GetActiveApp    => "~/bin/zb-agent app".into(),
+            Request::GetWindows      => "~/bin/zb-agent windows".into(),
 
             Request::RunCommand { cmd } => {
-                // Pass command as argument — zb-agent run wraps in JSON
                 let escaped = cmd.replace('\'', "'\\''");
-                format!("~/bin/zb-agent run '{}'", escaped)
+                format!("~/bin/zb-agent run '{escaped}'")
             }
-
-            Request::GetWindows =>
-                "~/bin/zb-agent windows".into(),
-
-            Request::GetWindowForApp { app } =>
-                format!("~/bin/zb-agent window '{}'",
-                    app.replace('\'', "'\\''")),
-
-            Request::FocusApp { app } =>
-                format!("~/bin/zb-agent focus '{}'",
-                    app.replace('\'', "'\\''")),
-
+            Request::GetWindowForApp { app } => {
+                format!("~/bin/zb-agent window '{}'", app.replace('\'', "'\\''"))
+            }
+            Request::FocusApp { app } => {
+                format!("~/bin/zb-agent focus '{}'", app.replace('\'', "'\\''"))
+            }
         }
     }
 
@@ -264,7 +245,7 @@ impl SshPool {
         match req {
             Request::GetCursor => {
                 let v: serde_json::Value = serde_json::from_str(&output)
-                    .map_err(|e| format!("Parse cursor failed: {} — raw: {}", e, &output[..output.len().min(100)]))?;
+                    .map_err(|e| format!("Parse cursor failed: {e} — raw: {}", &output[..output.len().min(100)]))?;
                 Ok(Response::CursorPos {
                     x: v["x"].as_f64().unwrap_or(0.0),
                     y: v["y"].as_f64().unwrap_or(0.0),
@@ -273,7 +254,7 @@ impl SshPool {
 
             Request::GetScreens => {
                 let v: serde_json::Value = serde_json::from_str(&output)
-                    .map_err(|e| format!("Parse screens failed: {} — raw: {}", e, &output[..output.len().min(100)]))?;
+                    .map_err(|e| format!("Parse screens failed: {e} — raw: {}", &output[..output.len().min(100)]))?;
                 let layout = v["layout"].as_array()
                     .ok_or("Missing layout field")?
                     .iter()
@@ -289,52 +270,40 @@ impl SshPool {
             }
 
             Request::GetClipboard => {
-                // zb-agent clipboard returns JSON wrapper
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(&output) {
                     Ok(Response::Clipboard {
                         text: v["text"].as_str().unwrap_or(&output).to_string(),
                     })
                 } else {
-                    // Fallback — treat as plain text
                     Ok(Response::Clipboard { text: output })
                 }
             }
 
             Request::GetActiveApp => {
-                // zb-agent app returns JSON wrapper
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(&output) {
                     Ok(Response::ActiveApp {
                         name:   v["name"].as_str().unwrap_or("").to_string(),
                         window: v["bundle"].as_str().unwrap_or("").to_string(),
                     })
                 } else {
-                    // Fallback — treat as plain app name
-                    Ok(Response::ActiveApp {
-                        name:   output,
-                        window: String::new(),
-                    })
+                    Ok(Response::ActiveApp { name: output, window: String::new() })
                 }
             }
 
             Request::RunCommand { .. } => {
-                // zb-agent run returns JSON with output + exit_code
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(&output) {
                     Ok(Response::CommandResult {
                         output: v["output"].as_str().unwrap_or("").to_string(),
                         error:  v["error"].as_str().unwrap_or("").to_string(),
                     })
                 } else {
-                    // Fallback — plain output
-                    Ok(Response::CommandResult {
-                        output,
-                        error: String::new(),
-                    })
+                    Ok(Response::CommandResult { output, error: String::new() })
                 }
             }
 
             Request::GetWindows => {
                 let v: serde_json::Value = serde_json::from_str(&output)
-                    .map_err(|e| format!("Parse windows failed: {}", e))?;
+                    .map_err(|e| format!("Parse windows failed: {e}"))?;
                 Ok(Response::Windows {
                     list: v["list"].as_array()
                         .ok_or("Missing list field")?
@@ -355,7 +324,7 @@ impl SshPool {
 
             Request::GetWindowForApp { .. } => {
                 let v: serde_json::Value = serde_json::from_str(&output)
-                    .map_err(|e| format!("Parse window failed: {}", e))?;
+                    .map_err(|e| format!("Parse window failed: {e}"))?;
                 Ok(Response::Window {
                     info: crate::ipc::WindowInfo {
                         id:    v["id"].as_u64().unwrap_or(0) as u32,
@@ -372,7 +341,7 @@ impl SshPool {
 
             Request::FocusApp { app } => {
                 let v: serde_json::Value = serde_json::from_str(&output)
-                    .map_err(|e| format!("Parse focus failed: {}", e))?;
+                    .map_err(|e| format!("Parse focus failed: {e}"))?;
                 Ok(Response::FocusResult {
                     app,
                     success: v["success"].as_bool().unwrap_or(false),
