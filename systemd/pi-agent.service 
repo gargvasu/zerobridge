@@ -1,8 +1,8 @@
 [Unit]
-Description=ZeroBridge Pi Agent — HID + Serial + SSH daemon
+Description=mac.hid — Pi Agent Daemon
 Documentation=https://github.com/gargvasu/zerobridge
-After=network.target multi-hid-setup.service
-Requires=multi-hid-setup.service
+After=network.target mac-hid-setup.service
+Requires=mac-hid-setup.service
 
 [Service]
 Type=simple

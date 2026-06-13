@@ -1,5 +1,5 @@
 [Unit]
-Description=ZeroBridge USB HID Gadget Setup
+Description=mac.hid — USB HID Gadget Setup
 Documentation=https://github.com/gargvasu/zerobridge
 After=sysinit.target
 Before=pi-agent.service
@@ -10,7 +10,7 @@ ExecStart=/usr/local/bin/multi-hid-setup.sh
 RemainAfterExit=yes
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=multi-hid-setup
+SyslogIdentifier=mac-hid-setup
 
 [Install]
 WantedBy=multi-user.target
