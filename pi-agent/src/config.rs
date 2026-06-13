@@ -43,9 +43,20 @@ fn config_paths() -> Vec<PathBuf> {
         PathBuf::from("zerobridge.toml"),
         PathBuf::from("/etc/zerobridge/config.toml"),
     ];
-    if let Some(home) = dirs::home_dir() {
-        paths.insert(1, home.join(".config/zerobridge/config.toml"));
+
+    if let Ok(home) = std::env::var("HOME") {
+        paths.insert(1, PathBuf::from(format!("{}/.config/zerobridge/config.toml", home)));
     }
+
+    if let Some(home) = dirs::home_dir() {
+        let p = home.join(".config/zerobridge/config.toml");
+        if !paths.contains(&p) {
+            paths.insert(2, p);
+        }
+    }
+    paths.push(PathBuf::from("/home/vasugarg/.config/zerobridge/config.toml"));
+
+    eprintln!("[config] Searching paths: {:?}", paths);
     paths
 }
 

@@ -8,6 +8,8 @@ use tokio::sync::Mutex;
 use crate::config::SshConfig;
 use crate::serial::protocol::{Request, Response};
 
+// ── russh client handler ───────────────────────────
+
 struct ClientHandler;
 
 #[async_trait::async_trait]
@@ -18,13 +20,15 @@ impl client::Handler for ClientHandler {
         &mut self,
         _server_public_key: &russh_keys::key::PublicKey,
     ) -> Result<bool, Self::Error> {
-        Ok(true)
+        Ok(true) // Trust USB tether — private network
     }
 }
 
+// ── SSH Connection ─────────────────────────────────
+
 pub struct SshConnection {
     handle: client::Handle<ClientHandler>,
-    host: String,
+    host:   String,
 }
 
 impl SshConnection {
@@ -34,9 +38,13 @@ impl SshConnection {
             ..<_>::default()
         });
 
-        let mut handle = client::connect(client_config, (host, config.port), ClientHandler)
-            .await
-            .map_err(|e| format!("SSH connect to {} failed: {}", host, e))?;
+        let mut handle = client::connect(
+            client_config,
+            (host, config.port),
+            ClientHandler,
+        )
+        .await
+        .map_err(|e| format!("SSH connect to {} failed: {}", host, e))?;
 
         let key = load_secret_key(&config.key, None)
             .map_err(|e| format!("Load key {} failed: {}", config.key, e))?;
@@ -50,7 +58,7 @@ impl SshConnection {
             return Err(format!("SSH auth rejected for {}", host));
         }
 
-        eprintln!("[ssh] Connected to {}", host);
+        eprintln!("[ssh] ✅ Connected to {}", host);
 
         Ok(SshConnection {
             handle,
@@ -59,14 +67,12 @@ impl SshConnection {
     }
 
     pub async fn exec(&mut self, cmd: &str) -> Result<String, String> {
-        let mut channel = self
-            .handle
+        let mut channel = self.handle
             .channel_open_session()
             .await
             .map_err(|e| format!("Channel open failed: {}", e))?;
 
-        channel
-            .exec(true, cmd)
+        channel.exec(true, cmd)
             .await
             .map_err(|e| format!("Exec '{}' failed: {}", cmd, e))?;
 
@@ -99,10 +105,12 @@ impl SshConnection {
     }
 }
 
+// ── SSH Pool ───────────────────────────────────────
+
 pub struct SshPool {
-    host: String,
-    config: SshConfig,
-    conn: Arc<Mutex<Option<SshConnection>>>,
+    host:    String,
+    config:  SshConfig,
+    conn:    Arc<Mutex<Option<SshConnection>>>,
     healthy: Arc<AtomicBool>,
     checked: Arc<AtomicBool>,
 }
@@ -112,7 +120,7 @@ impl SshPool {
         SshPool {
             host,
             config,
-            conn: Arc::new(Mutex::new(None)),
+            conn:    Arc::new(Mutex::new(None)),
             healthy: Arc::new(AtomicBool::new(false)),
             checked: Arc::new(AtomicBool::new(false)),
         }
@@ -163,7 +171,9 @@ impl SshPool {
 
     pub async fn request(&self, req: Request) -> Result<Response, String> {
         let cmd = self.req_to_cmd(&req);
+        eprintln!("[ssh] → {} : {}", self.host, cmd);
         let output = self.exec(&cmd).await?;
+        eprintln!("[ssh] ← {} bytes", output.len());
         self.parse_output(req, output)
     }
 
@@ -172,38 +182,46 @@ impl SshPool {
         match self.exec("echo ok").await {
             Ok(o) if o.trim() == "ok" => {
                 self.healthy.store(true, Ordering::Relaxed);
-                eprintln!("[ssh] {} healthy", self.host);
+                eprintln!("[ssh] {} ✅ healthy", self.host);
             }
             _ => {
                 self.healthy.store(false, Ordering::Relaxed);
-                eprintln!("[ssh] {} unhealthy — resetting", self.host);
+                eprintln!("[ssh] {} ❌ unhealthy — resetting", self.host);
                 *self.conn.lock().await = None;
             }
         }
     }
 
+    // ── Command mapping ────────────────────────────
+
     fn req_to_cmd(&self, req: &Request) -> String {
         match req {
             Request::GetCursor =>
-                "python3 -c 'from Quartz import NSEvent; import json; p=NSEvent.mouseLocation(); print(json.dumps({\"type\":\"cursor_pos\",\"x\":round(p.x,1),\"y\":round(p.y,1)}))'".into(),
+                "~/bin/zb-agent cursor".into(),
 
             Request::GetScreens =>
-                "python3 -c 'from AppKit import NSScreen; import json; screens=[{\"id\":i,\"x\":int(s.frame().origin.x),\"y\":int(s.frame().origin.y),\"w\":int(s.frame().size.width),\"h\":int(s.frame().size.height)} for i,s in enumerate(NSScreen.screens())]; screens.sort(key=lambda s:s[\"x\"]); print(json.dumps({\"type\":\"screens\",\"layout\":screens}))'".into(),
+                "~/bin/zb-agent screens".into(),
 
-            Request::GetClipboard => "pbpaste".into(),
+            Request::GetClipboard =>
+                "~/bin/zb-agent clipboard".into(),
 
             Request::GetActiveApp =>
-                "osascript -e 'tell application \"System Events\" to get name of first process where it is frontmost'".into(),
+                "~/bin/zb-agent app".into(),
 
-            Request::RunCommand { cmd } => cmd.clone(),
+            Request::RunCommand { cmd } =>
+                format!("~/bin/zb-agent run '{}'",
+                    cmd.replace('\'', "'\\''")  // escape single quotes
+                ),
         }
     }
+
+    // ── Response parsing ───────────────────────────
 
     fn parse_output(&self, req: Request, output: String) -> Result<Response, String> {
         match req {
             Request::GetCursor => {
-                let v: serde_json::Value =
-                    serde_json::from_str(&output).map_err(|e| format!("Parse cursor: {}", e))?;
+                let v: serde_json::Value = serde_json::from_str(&output)
+                    .map_err(|e| format!("Parse cursor failed: {} — raw: {}", e, output))?;
                 Ok(Response::CursorPos {
                     x: v["x"].as_f64().unwrap_or(0.0),
                     y: v["y"].as_f64().unwrap_or(0.0),
@@ -211,34 +229,36 @@ impl SshPool {
             }
 
             Request::GetScreens => {
-                let v: serde_json::Value =
-                    serde_json::from_str(&output).map_err(|e| format!("Parse screens: {}", e))?;
-                let layout = v["layout"]
-                    .as_array()
-                    .ok_or("No layout field")?
+                let v: serde_json::Value = serde_json::from_str(&output)
+                    .map_err(|e| format!("Parse screens failed: {} — raw: {}", e, output))?;
+                let layout = v["layout"].as_array()
+                    .ok_or("Missing layout field")?
                     .iter()
                     .map(|s| crate::serial::protocol::Screen {
                         id: s["id"].as_u64().unwrap_or(0) as u32,
-                        x: s["x"].as_i64().unwrap_or(0) as i32,
-                        y: s["y"].as_i64().unwrap_or(0) as i32,
-                        w: s["w"].as_u64().unwrap_or(0) as u32,
-                        h: s["h"].as_u64().unwrap_or(0) as u32,
+                        x:  s["x"].as_i64().unwrap_or(0) as i32,
+                        y:  s["y"].as_i64().unwrap_or(0) as i32,
+                        w:  s["w"].as_u64().unwrap_or(0) as u32,
+                        h:  s["h"].as_u64().unwrap_or(0) as u32,
                     })
                     .collect();
                 Ok(Response::Screens { layout })
             }
 
-            Request::GetClipboard => Ok(Response::Clipboard { text: output }),
+            Request::GetClipboard =>
+                Ok(Response::Clipboard { text: output }),
 
-            Request::GetActiveApp => Ok(Response::ActiveApp {
-                name: output,
-                window: String::new(),
-            }),
+            Request::GetActiveApp =>
+                Ok(Response::ActiveApp {
+                    name:   output,
+                    window: String::new(),
+                }),
 
-            Request::RunCommand { .. } => Ok(Response::CommandResult {
-                output,
-                error: String::new(),
-            }),
+            Request::RunCommand { .. } =>
+                Ok(Response::CommandResult {
+                    output,
+                    error: String::new(),
+                }),
         }
     }
 }
