@@ -82,6 +82,7 @@ pub enum IpcResponse {
     // Status
     StatusInfo {
         id:               String,
+        ws_healthy:       bool,
         ssh_usb_healthy:  bool,
         ssh_wifi_healthy: bool,
     },

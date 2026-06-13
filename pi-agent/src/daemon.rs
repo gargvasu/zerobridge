@@ -313,6 +313,7 @@ impl Daemon {
                 let status = self.bridge.status();
                 IpcResponse::StatusInfo {
                     id,
+                    ws_healthy:       status.ws_healthy,
                     ssh_usb_healthy:  status.ssh_usb_healthy,
                     ssh_wifi_healthy: status.ssh_wifi_healthy,
                 }

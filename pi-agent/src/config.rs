@@ -7,6 +7,10 @@ pub struct Config {
     pub hosts: HostsConfig,
     pub serial: SerialConfig,
     pub hid: HidConfig,
+    #[serde(default)]
+    pub bridge: BridgeConfig,
+    #[serde(default)]
+    pub websocket: WebSocketConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -36,6 +40,34 @@ pub struct HidConfig {
     pub keyboard: String,
     pub mouse: String,
     pub media: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct BridgeConfig {
+    pub mode: String,
+}
+
+impl Default for BridgeConfig {
+    fn default() -> Self {
+        BridgeConfig {
+            mode: "hybrid".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct WebSocketConfig {
+    pub url: String,
+    pub timeout_ms: u64,
+}
+
+impl Default for WebSocketConfig {
+    fn default() -> Self {
+        WebSocketConfig {
+            url: "ws://169.254.206.1:8082".to_string(),
+            timeout_ms: 2000,
+        }
+    }
 }
 
 fn config_paths() -> Vec<PathBuf> {
@@ -102,4 +134,11 @@ max_retries       = 2
 keyboard = "/dev/hidg0"
 mouse    = "/dev/hidg1"
 media    = "/dev/hidg2"
+
+[bridge]
+mode = "hybrid"
+
+[websocket]
+url        = "ws://169.254.206.1:8082"
+timeout_ms = 2000
 "#;

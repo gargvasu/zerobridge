@@ -25,3 +25,18 @@ max_retries       = 2
 keyboard = "/dev/hidg0"
 mouse    = "/dev/hidg1"
 media    = "/dev/hidg2"
+
+# Bridge routing mode
+# "websocket" — WebSocket only (fastest, requires zb-agent serve on Mac)
+# "serial"    — Serial only (legacy)
+# "ssh"       — SSH only (legacy)
+# "hybrid"    — WebSocket primary, SSH fallback (recommended)
+[bridge]
+mode = "hybrid"
+
+# WebSocket connection to Mac agent
+# Only used when bridge mode includes websocket
+# Start on Mac: zb-agent serve --port 8082 --bind 169.254.206.1
+[websocket]
+url        = "ws://mac.hid:8082"
+timeout_ms = 2000

@@ -3,15 +3,18 @@ use tokio::time::{sleep, Duration};
 
 use crate::bridge::serial_queue::SerialQueue;
 use crate::bridge::ssh_pool::SshPool;
+use crate::bridge::ws_pool::WsPool;
 use crate::config::Config;
 use crate::serial::protocol::{Request, Response};
 
 const HEALTH_INTERVAL_SECS: u64 = 30;
 
 pub struct MacBridge {
-    pub serial: Arc<SerialQueue>,
-    pub ssh_usb: Arc<SshPool>,
+    pub serial:   Arc<SerialQueue>,
+    pub ssh_usb:  Arc<SshPool>,
     pub ssh_wifi: Arc<SshPool>,
+    pub ws:       Option<Arc<WsPool>>,
+    mode:         String,
 }
 
 impl MacBridge {
@@ -20,14 +23,30 @@ impl MacBridge {
             .await
             .map_err(|e| format!("Serial init failed: {}", e))?;
 
+        // Initialize WebSocket pool if mode uses it
+        let ws = match config.bridge.mode.as_str() {
+            "websocket" | "hybrid" => {
+                eprintln!("[bridge] Initializing WebSocket pool → {}", config.websocket.url);
+                Some(Arc::new(WsPool::new(config.websocket.clone())))
+            }
+            _ => {
+                eprintln!("[bridge] WebSocket disabled (mode={})", config.bridge.mode);
+                None
+            }
+        };
+
         let bridge = MacBridge {
             serial: Arc::new(serial),
             ssh_usb: Arc::new(SshPool::new(config.hosts.usb.clone(), config.ssh.clone())),
             ssh_wifi: Arc::new(SshPool::new(config.hosts.wifi.clone(), config.ssh.clone())),
+            ws,
+            mode: config.bridge.mode.clone(),
         };
 
         // Spawn background health monitor
         bridge.spawn_health_monitor();
+
+        eprintln!("[bridge] Mode: {}", bridge.mode);
 
         Ok(bridge)
     }
@@ -35,25 +54,50 @@ impl MacBridge {
     // ── Public API ─────────────────────────────────
 
     pub async fn request(&self, req: Request) -> Result<Response, String> {
-        match &req {
-            // Real-time queries → serial first
-            Request::GetCursor | Request::GetScreens | Request::GetActiveApp => {
-                self.serial_with_fallback(req).await
+        match self.mode.as_str() {
+            "websocket" => {
+                // WebSocket for everything, fallback to SSH
+                self.ws_with_fallback(req).await
             }
-
-            Request::GetWindows | Request::GetWindowForApp { .. } | Request::FocusApp { .. } => {
+            "serial" => {
+                // Legacy serial-first routing
+                match &req {
+                    Request::GetCursor | Request::GetScreens | Request::GetActiveApp => {
+                        self.serial_with_fallback(req).await
+                    }
+                    _ => self.ssh_with_fallback(req).await,
+                }
+            }
+            "ssh" => {
+                // SSH only
                 self.ssh_with_fallback(req).await
             }
-
-            // Large data → SSH directly
-            Request::GetClipboard => self.ssh_with_fallback(req).await,
-
-            // Commands → SSH only
-            Request::RunCommand { .. } => self.ssh_with_fallback(req).await,
+            "hybrid" | _ => {
+                // WebSocket primary for all queries, SSH fallback
+                self.ws_with_fallback(req).await
+            }
         }
     }
 
     // ── Routing ────────────────────────────────────
+
+    async fn ws_with_fallback(&self, req: Request) -> Result<Response, String> {
+        if let Some(ws) = &self.ws {
+            if ws.should_try() {
+                match ws.request(req.clone()).await {
+                    Ok(resp) => {
+                        eprintln!("[bridge] ✅ websocket");
+                        return Ok(resp);
+                    }
+                    Err(e) => {
+                        eprintln!("[bridge] ⚠ websocket failed: {} — trying SSH", e);
+                    }
+                }
+            }
+        }
+        // Fallback to SSH
+        self.ssh_with_fallback(req).await
+    }
 
     async fn serial_with_fallback(&self, req: Request) -> Result<Response, String> {
         match self.serial.request(req.clone()).await {
@@ -101,12 +145,16 @@ impl MacBridge {
     fn spawn_health_monitor(&self) {
         let ssh_usb = self.ssh_usb.clone();
         let ssh_wifi = self.ssh_wifi.clone();
+        let ws = self.ws.clone();
 
         tokio::spawn(async move {
             loop {
                 sleep(Duration::from_secs(HEALTH_INTERVAL_SECS)).await;
 
                 eprintln!("[health] Checking channels...");
+                if let Some(ws) = &ws {
+                    ws.check_health().await;
+                }
                 ssh_usb.check_health().await;
                 ssh_wifi.check_health().await;
             }
@@ -117,13 +165,15 @@ impl MacBridge {
 
     pub fn status(&self) -> BridgeStatus {
         BridgeStatus {
-            ssh_usb_healthy: self.ssh_usb.is_healthy(),
+            ws_healthy:       self.ws.as_ref().map(|w| w.is_healthy()).unwrap_or(false),
+            ssh_usb_healthy:  self.ssh_usb.is_healthy(),
             ssh_wifi_healthy: self.ssh_wifi.is_healthy(),
         }
     }
 }
 
 pub struct BridgeStatus {
-    pub ssh_usb_healthy: bool,
+    pub ws_healthy:       bool,
+    pub ssh_usb_healthy:  bool,
     pub ssh_wifi_healthy: bool,
 }
