@@ -15,7 +15,7 @@ Pipe JSON commands into a Unix socket on the Pi, or connect securely to the Go W
 * **🔌 Single-Cable Composite USB Gadget**: Multiplexes **USB Keyboard**, **USB Mouse**, **USB Consumer (Media) Keys**, **CDC-ACM Serial**, and **CDC-ECM Ethernet** over a single standard USB OTG cable.
 * **🛡️ Sandboxing & Permission Bypass**: Since the host Mac interfaces with the Pi Zero as a native hardware USB keyboard and mouse, automation workflows run reliably without needing complex accessibility GUI permissions, API-level scripting tokens, or app sandbox configuration changes.
 * **🔒 End-to-End Encrypted (E2EE) Channel**: Establishes dynamic ephemeral **P-256 ECDH (Elliptic Curve Diffie-Hellman)** key exchanges and encrypts all command/telemetry payloads with **AES-256-GCM** (derived via **HKDF-SHA256**). The Go Web Server operates purely as a transport relay and has zero visibility into the decrypted content.
-* **🔔 Real-Time Web Push Notifications**: Delivers push alerts to mobile devices on macOS power and security transitions (Display Sleep, Screen Locked, Active/Unlocked) using hand-rolled ES256 VAPID authorization headers for APNs (Apple Push) compatibility.
+* **🔔 macOS State-Transition Detection**: Continuously polls the host for power and security transitions (Display Sleep, Screen Locked, Active/Unlocked) and surfaces them live in the PWA. *(Background **push notifications** are **not supported** in the PWA — see [Roadmap](#-roadmap--planned-features) — and are planned for the upcoming native iOS app.)*
 * **📱 Progressive Web App (PWA) Control**: Serves a mobile-friendly Progressive Web App (PWA) client interface directly from the Pi Zero, featuring a virtual touchpad, keyboard entry, system media keys, and live telemetry on mobile devices.
 * **🔐 Passwordless Passkey Security (WebAuthn)**: Secured by local WebAuthn credentials (TouchID / FaceID) to lock out unauthorized devices, with administrative enrollment gated by a temporary 6-digit setup code.
 * **🔒 Remote Lock, Wake & Unlock**: Wirelessly lock, wake, and unlock the host Mac. Leverages hardware-emulated keystrokes to wake (double `TAB`) and lock (`ctrl+cmd+q` shortcut) macOS, and queries live system lock/display status (`get_mac_state`) before securely typing the password via HID.
@@ -86,10 +86,51 @@ ZeroBridge is designed with safety and device boundaries in mind:
 * **🔒 End-to-End Encrypted (E2EE) Channel**: Standard TLS protects the connection to the Go web server. On top of this, all communication passing through the proxy between the PWA client and the `pi-agent` daemon is encrypted end-to-end. Keys are established dynamically using an ephemeral P-256 ECDH Diffie-Hellman handshake on connection, and payloads are encrypted using AES-256-GCM. The intermediate Go web server only sees encrypted JSON envelopes (`{"enc": "..."}`) and cannot inspect or forge commands or telemetry.
 * **🔌 USB-Only macOS Service Binding**: Hardens the macOS host by configuring the Swift daemon (`zb-agent serve`) to bind exclusively to the static CDC-ECM link (`169.254.206.1`). This prevents any incoming automation requests or telemetry queries from the local WiFi or external interfaces.
 * **🔐 WebAuthn & Localized Authentication**: Authentication is performed cryptographically using Passkeys (TouchID / FaceID). Credentials and cryptographic secrets are stored in a persistent local store (`/etc/zerobridge/store.json`) on the Pi, and registration is gated by a temporary 6-digit administrative setup code generated only on the local Pi or macOS host.
-* **🔔 Privacy-First Web Push Transitions**: When macOS locks or wakes up, the system publishes notifications using a custom VAPID protocol. No passwords, session details, or host telemetry are ever sent to push servers—only generic state transitions ("Mac is locked", "Mac is active").
+* **🔔 Privacy-First State Transitions**: When macOS locks or wakes, the system surfaces generic state transitions ("Mac is locked", "Mac is active") in the client. No passwords, session details, or host telemetry ever leave the local link. *(The planned native-app push path will likewise carry only generic state strings — never credentials or telemetry.)*
 * **🛡️ TLS-Encrypted Transport**: The Go Web Server runs over TLS 1.3 to secure web views and WebSocket sessions. Certificates are signed by a locally generated CA, isolating network traffic from local snooping.
 * **🔑 Pubkey-Locked Pi Zero SSH**: The Pi Zero's SSH daemon is locked down by disabling password authentication (`PasswordAuthentication no`). The system is only accessible to computers presenting authorized cryptographic SSH keys.
 * **🛡️ Local Socket Boundary**: The IPC control channel `/tmp/zerobridge.sock` is locally scoped to the Pi Zero's filesystem with Unix permissions (`0666`). It does not open external network ports, meaning remote clients cannot send automated keys or mouse actions.
+
+---
+
+## 🎯 Intended Use & Threat Model
+
+ZeroBridge is built for a **single trusted operator** controlling **their own Mac** over a **private USB tether or an isolated/home LAN**. Being explicit about the boundary is part of being a responsible open-source security tool.
+
+**What it is designed for**
+* Personal remote control of a Mac you own, from your own phone, over a USB cable or trusted local network.
+* Hobbyist, homelab, and accessibility use cases where GUI-scripting permissions are inconvenient or unavailable.
+
+**What it protects against**
+| Threat | Mitigation |
+|---|---|
+| Network eavesdropping on the local link | TLS 1.3 (WSS) for all browser ↔ server traffic |
+| A compromised/curious `go-server` reading keystrokes | P-256 ECDH + AES-256-GCM **end-to-end** encryption; the relay only sees `{"enc":"…"}` |
+| An unauthorized device connecting | WebAuthn passkey (TouchID/FaceID), enrollment gated by a one-time 6-digit code |
+| Password exposure at rest | macOS password encrypted client-side with a WebAuthn-PRF-derived key; never stored in plaintext |
+| Remote shell access to the Pi | SSH password auth disabled; pubkey-only |
+
+**What it explicitly does *NOT* defend against — do not deploy outside these bounds**
+* ⚠️ **Internet exposure.** Do **not** port-forward `8443` or bind it to a public interface. ZeroBridge assumes a private link.
+* ⚠️ **Hostile LAN.** On a shared/corporate network, the 6-digit setup code is brute-forceable without rate limiting (see [Roadmap](#-roadmap--planned-features)). Use the USB tether in untrusted environments.
+* ⚠️ **A fully compromised Pi.** The Pi is the hardware keyboard — root on the Pi means full control of the Mac's input. Treat the Pi as a trusted device.
+* ⚠️ **Physical access** to either the Mac or the Pi.
+
+> **Rule of thumb:** if the USB cable or the LAN between your phone and the Pi is something you'd trust with your unlocked laptop, ZeroBridge is in scope. Otherwise, prefer the direct USB tether.
+
+---
+
+## 🧰 Hardware Requirements
+
+| Component | Notes |
+|---|---|
+| **Raspberry Pi Zero W / 2 W** | Must support USB OTG gadget mode. The 2 W is recommended for lower latency. |
+| **USB OTG-capable data cable** | Connects the Pi's **USB** port (not PWR) to the Mac. Must be a **data** cable, not charge-only. |
+| **microSD card** (8 GB+) | Raspberry Pi OS Lite (32-bit, ARMv6-compatible). |
+| **macOS host** | Apple Silicon or Intel. The Mac sees the Pi as a composite USB keyboard/mouse/serial/ethernet device. |
+| *(optional)* **A second machine** | Any SSH client (e.g. a laptop) for headless Pi administration during setup. |
+
+The Pi enumerates as a single composite USB gadget — no soldering, no GPIO wiring, no external HID chips. A standard Pi Zero and one good cable is the entire bill of materials.
 
 ---
 
@@ -173,7 +214,8 @@ Initialize/regenerate TLS certificates on the Pi Zero:
    ./scripts/zb-ctl.sh setup-code
    ```
 5. Enter the generated 6-digit code in the mobile client and complete the WebAuthn registration process using TouchID/FaceID. Your device is now authorized!
-6. **Web Push notifications**: In the PWA UI, tap the "Enable Push Notifications" button. This registers your device with the VAPID push keys stored on the Pi database to receive instant, real-time alerts when your Mac sleeps, locks, or wakes.
+
+> **ℹ️ Note on notifications:** Background **push notifications are not available in the PWA**. Apple's Web Push (APNs) only delivers to home-screen-installed PWAs under constraints that the locally-hosted, self-signed ZeroBridge deployment cannot satisfy, so the VAPID handshake is rejected (`BadJwtToken`). macOS state transitions are still detected and shown **live while the app is open**. Real push delivery is planned for the native iOS app — see the [Roadmap](#-roadmap--planned-features).
 
 ### 5. Secure Lock, Wake, and Unlock Flow
 Once authorized via WebAuthn, the PWA client coordinates screen status querying and hardware key simulation to securely wake, lock, and unlock your macOS host:
@@ -431,6 +473,56 @@ To measure your own baseline:
 # Run on the Pi against a live daemon
 ./scripts/latency-diag.sh
 ```
+
+---
+
+## 🗺️ Roadmap & Planned Features
+
+ZeroBridge is under active development. Contributions and ideas are welcome — see [Contributing](#-contributing).
+
+### 📱 Native iOS App
+The biggest planned addition. A native SwiftUI client replaces the PWA's hard limits with first-class platform integration:
+* **Real push notifications** for Mac lock / sleep / wake transitions via **APNs** — the PWA Web Push path is a dead end on Apple's stack ([why](#4-pwa-registration--enrollment)), so this is the real fix.
+* Native **passkey** (AuthenticationServices) + **WebAuthn PRF** encryption, identical to the web crypto model.
+* Background connectivity, Lock Screen widgets, and Shortcuts/Siri integration.
+* The Go server backend stays unchanged — the app speaks the same E2EE protocol.
+
+### 🔐 Security Hardening (tracked for open-source readiness)
+| Item | Status | Notes |
+|---|---|---|
+| Rate limiting on setup-code & auth | Planned | Lock out after N failed attempts; closes LAN brute-force gap |
+| HTTP security headers (HSTS, CSP, `X-Frame-Options`, `nosniff`) | Planned | Server-side middleware |
+| Short-lived JWT + silent refresh | Planned | Currently long-lived until restart |
+| Structured audit log (auth attempts, source IP, timestamps) | Planned | Operator visibility into probing |
+| `cargo audit` + `govulncheck` in CI | Planned | Supply-chain hygiene |
+| `SECURITY.md` + documented threat model | In progress | Threat model now in README |
+
+### ✨ Feature Enhancements
+* **File transfer** between phone and Mac over the encrypted channel.
+* **Clipboard sync** (bidirectional) surfaced in the PWA, not just `get_clipboard`.
+* **Macro recorder** — capture and replay `type_smart` command chains.
+* **Multi-credential support** — authorize more than one device with per-device revocation.
+* **Trackpad gestures** — two-finger scroll, pinch-zoom via the HID mouse layer.
+* **On-screen key latency HUD** in the debug panel.
+* **Persisted push subscriptions** (for the native app) surviving server restarts.
+
+### ⚠️ Known Limitations
+* **PWA push notifications are unsupported** (Apple APNs rejects the self-hosted VAPID handshake). State is shown live only while the app is foregrounded.
+* Single active passkey at a time (multi-credential is on the roadmap).
+* Setup code is not yet rate-limited — prefer the USB tether on untrusted networks.
+
+---
+
+## 🤝 Contributing
+
+Issues, feature requests, and pull requests are welcome. If you're contributing code:
+
+* **Build before submitting** — `./scripts/build.sh` must cross-compile cleanly for ARMv6.
+* **Match existing patterns** — the Rust daemon, Go server, and PWA each have an established style; follow the surrounding code.
+* **Security-relevant changes** — describe the threat-model impact in the PR (see [Intended Use & Threat Model](#-intended-use--threat-model)).
+
+### 🛡️ Reporting a Vulnerability
+Please **do not** open a public issue for security vulnerabilities. Instead, report them privately via the repository's security advisory page (or the contact in `SECURITY.md` once published). Given ZeroBridge emulates a hardware keyboard, input-path and authentication issues are taken seriously.
 
 ---
 
