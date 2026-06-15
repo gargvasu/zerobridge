@@ -14,6 +14,8 @@ Pipe JSON commands into a Unix socket on the Pi, or connect securely to the Go W
 
 * **🔌 Single-Cable Composite USB Gadget**: Multiplexes **USB Keyboard**, **USB Mouse**, **USB Consumer (Media) Keys**, **CDC-ACM Serial**, and **CDC-ECM Ethernet** over a single standard USB OTG cable.
 * **🛡️ Sandboxing & Permission Bypass**: Since the host Mac interfaces with the Pi Zero as a native hardware USB keyboard and mouse, automation workflows run reliably without needing complex accessibility GUI permissions, API-level scripting tokens, or app sandbox configuration changes.
+* **🔒 End-to-End Encrypted (E2EE) Channel**: Establishes dynamic ephemeral **P-256 ECDH (Elliptic Curve Diffie-Hellman)** key exchanges and encrypts all command/telemetry payloads with **AES-256-GCM** (derived via **HKDF-SHA256**). The Go Web Server operates purely as a transport relay and has zero visibility into the decrypted content.
+* **🔔 Real-Time Web Push Notifications**: Delivers push alerts to mobile devices on macOS power and security transitions (Display Sleep, Screen Locked, Active/Unlocked) using hand-rolled ES256 VAPID authorization headers for APNs (Apple Push) compatibility.
 * **📱 Progressive Web App (PWA) Control**: Serves a mobile-friendly Progressive Web App (PWA) client interface directly from the Pi Zero, featuring a virtual touchpad, keyboard entry, system media keys, and live telemetry on mobile devices.
 * **🔐 Passwordless Passkey Security (WebAuthn)**: Secured by local WebAuthn credentials (TouchID / FaceID) to lock out unauthorized devices, with administrative enrollment gated by a temporary 6-digit setup code.
 * **🔒 Remote Lock, Wake & Unlock**: Wirelessly lock, wake, and unlock the host Mac. Leverages hardware-emulated keystrokes to wake (double `TAB`) and lock (`ctrl+cmd+q` shortcut) macOS, and queries live system lock/display status (`get_mac_state`) before securely typing the password via HID.
@@ -62,7 +64,7 @@ Pipe JSON commands into a Unix socket on the Pi, or connect securely to the Go W
                           │         Keyboard             Mouse              Media
                           │       (/dev/hidg0)       (/dev/hidg1)       (/dev/hidg2)
                           │
-     ┌──────────────┐     │ (WS Proxy)
+     ┌──────────────┐     │ (WS Proxy - Encrypted relay)
      │  go-server   │◄────┘
      │  (Go HTTPS)  │
      └──────▲───────┘
@@ -70,8 +72,8 @@ Pipe JSON commands into a Unix socket on the Pi, or connect securely to the Go W
             │ (PWA Client over HTTPS / TLS)
             ▼
      ┌──────────────┐
-     │ Mobile / PWA │
-     │ (Touch/Keys) │
+     │ Mobile / PWA │ <==============================================> [ pi-agent (Rust) ]
+     │ (Touch/Keys) │             (P-256 ECDH & AES-256-GCM E2EE)
      └──────────────┘
 ```
 
@@ -81,8 +83,10 @@ Pipe JSON commands into a Unix socket on the Pi, or connect securely to the Go W
 
 ZeroBridge is designed with safety and device boundaries in mind:
 
+* **🔒 End-to-End Encrypted (E2EE) Channel**: Standard TLS protects the connection to the Go web server. On top of this, all communication passing through the proxy between the PWA client and the `pi-agent` daemon is encrypted end-to-end. Keys are established dynamically using an ephemeral P-256 ECDH Diffie-Hellman handshake on connection, and payloads are encrypted using AES-256-GCM. The intermediate Go web server only sees encrypted JSON envelopes (`{"enc": "..."}`) and cannot inspect or forge commands or telemetry.
 * **🔌 USB-Only macOS Service Binding**: Hardens the macOS host by configuring the Swift daemon (`zb-agent serve`) to bind exclusively to the static CDC-ECM link (`169.254.206.1`). This prevents any incoming automation requests or telemetry queries from the local WiFi or external interfaces.
 * **🔐 WebAuthn & Localized Authentication**: Authentication is performed cryptographically using Passkeys (TouchID / FaceID). Credentials and cryptographic secrets are stored in a persistent local store (`/etc/zerobridge/store.json`) on the Pi, and registration is gated by a temporary 6-digit administrative setup code generated only on the local Pi or macOS host.
+* **🔔 Privacy-First Web Push Transitions**: When macOS locks or wakes up, the system publishes notifications using a custom VAPID protocol. No passwords, session details, or host telemetry are ever sent to push servers—only generic state transitions ("Mac is locked", "Mac is active").
 * **🛡️ TLS-Encrypted Transport**: The Go Web Server runs over TLS 1.3 to secure web views and WebSocket sessions. Certificates are signed by a locally generated CA, isolating network traffic from local snooping.
 * **🔑 Pubkey-Locked Pi Zero SSH**: The Pi Zero's SSH daemon is locked down by disabling password authentication (`PasswordAuthentication no`). The system is only accessible to computers presenting authorized cryptographic SSH keys.
 * **🛡️ Local Socket Boundary**: The IPC control channel `/tmp/zerobridge.sock` is locally scoped to the Pi Zero's filesystem with Unix permissions (`0666`). It does not open external network ports, meaning remote clients cannot send automated keys or mouse actions.
@@ -169,6 +173,7 @@ Initialize/regenerate TLS certificates on the Pi Zero:
    ./scripts/zb-ctl.sh setup-code
    ```
 5. Enter the generated 6-digit code in the mobile client and complete the WebAuthn registration process using TouchID/FaceID. Your device is now authorized!
+6. **Web Push notifications**: In the PWA UI, tap the "Enable Push Notifications" button. This registers your device with the VAPID push keys stored on the Pi database to receive instant, real-time alerts when your Mac sleeps, locks, or wakes.
 
 ### 5. Secure Lock, Wake, and Unlock Flow
 Once authorized via WebAuthn, the PWA client coordinates screen status querying and hardware key simulation to securely wake, lock, and unlock your macOS host:
@@ -348,6 +353,18 @@ Fully flushes keyboard and mouse queues and resets key mappings.
 Tests connection to the Pi local daemon.
 * **Request:** `{"id":"19", "type":"ping"}`
 * **Response:** `{"type":"pong", "id":"19"}`
+
+---
+
+### 4. End-to-End Encryption (E2EE) Handshake Protocol
+When a client connects to the `pi-agent` over a secure WebSocket channel, the daemon initiates a Diffie-Hellman handshake before accepting any commands:
+1. **Daemon Greeting (`ecdh_pubkey`)**: `pi-agent` generates an ephemeral P-256 keypair and transmits its base64url-encoded public key as the very first line of the connection:
+   * **Payload:** `{"type":"ecdh_pubkey", "pubkey":"<pi-ephemeral-public-key-base64url>"}`
+2. **Client Key Exchange (`ecdh_init`)**: The client (PWA) generates its own ephemeral P-256 keypair, computes the shared secret, and sends its public key back:
+   * **Payload:** `{"pubkey":"<client-ephemeral-public-key-base64url>"}`
+3. **Encrypted Envelope (`EncryptedMsg`)**: Once keys are established, all subsequent commands and responses are encrypted using AES-256-GCM. The plaintext JSON command is encrypted with a unique 12-byte IV and packed into an encrypted base64 envelope:
+   * **Command:** `{"enc":"<base64-iv-and-ciphertext>"}`
+   * **Response:** `{"enc":"<base64-iv-and-ciphertext>"}`
 
 ---
 
