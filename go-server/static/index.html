@@ -489,6 +489,75 @@ async function aesDecrypt(keyBytes, iv, ciphertextB64) {
   return new TextDecoder().decode(pt);
 }
 
+// ── E2E session (P-256 ECDH + AES-256-GCM) ───────────────────────────────────
+
+let e2eKey = null;          // CryptoKey for AES-256-GCM, set after ECDH
+let e2eReady;               // Promise that resolves when session key is derived
+let e2eResolve;             // resolver for e2eReady
+
+function resetE2E() {
+  e2eKey = null;
+  e2eReady = new Promise(r => { e2eResolve = r; });
+}
+resetE2E(); // initialise on load
+
+async function doECDH(piPubB64) {
+  try {
+    // Generate ephemeral P-256 key pair
+    const myKey = await crypto.subtle.generateKey(
+      { name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+
+    // Export our uncompressed public key (65 bytes) as base64url
+    const myPubRaw = await crypto.subtle.exportKey("raw", myKey.publicKey);
+    const myPubB64 = bytesToB64url(new Uint8Array(myPubRaw));
+
+    // Import pi-agent's public key
+    const piPubKey = await crypto.subtle.importKey(
+      "raw", urlBase64ToUint8Array(piPubB64),
+      { name: "ECDH", namedCurve: "P-256" }, false, []);
+
+    // Raw ECDH shared secret (x-coordinate, 32 bytes)
+    const sharedBits = await crypto.subtle.deriveBits(
+      { name: "ECDH", public: piPubKey }, myKey.privateKey, 256);
+
+    // HKDF-SHA-256(ikm=shared_x, salt=empty, info="zerobridge-e2e") → AES-256-GCM key
+    const hkdfKey = await crypto.subtle.importKey(
+      "raw", sharedBits, "HKDF", false, ["deriveKey"]);
+    e2eKey = await crypto.subtle.deriveKey(
+      { name: "HKDF", hash: "SHA-256",
+        salt: new Uint8Array(0),
+        info: new TextEncoder().encode("zerobridge-e2e") },
+      hkdfKey, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+
+    // Send our public key to pi-agent to complete the handshake
+    ws.send(JSON.stringify({ type: "ecdh_init", pubkey: myPubB64 }));
+    e2eResolve();
+    dbg("e2e session established", "ok");
+  } catch (err) {
+    dbg("ECDH failed: " + err.message, "error");
+  }
+}
+
+async function e2eEncrypt(obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv }, e2eKey,
+    new TextEncoder().encode(JSON.stringify(obj)));
+  // Prepend IV: payload = iv || ciphertext+tag
+  const payload = new Uint8Array(12 + ct.byteLength);
+  payload.set(iv);
+  payload.set(new Uint8Array(ct), 12);
+  return { enc: bytesToB64(payload) };
+}
+
+async function e2eDecrypt(encB64) {
+  const payload = b64ToBytes(encB64);
+  const iv = payload.slice(0, 12);
+  const ct = payload.slice(12);
+  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, e2eKey, ct);
+  return new TextDecoder().decode(plain);
+}
+
 // ── WebAuthn helpers ──────────────────────────────────────────────────────────
 
 // Convert server-side base64url challenge/id fields to ArrayBuffer
@@ -742,7 +811,7 @@ document.getElementById("btn-register-passkey").addEventListener("click", async 
       toast("Registered with Face ID!");
       connectWS();
       show("screen-main");
-      subscribePush();
+      dbg("push: not available — native iOS app needed", "warn");
     } else {
       toast("Registered! Signing in…");
       await doAuth();
@@ -800,7 +869,7 @@ async function doAuth() {
     toast("Signed in");
     connectWS();
     show("screen-main");
-    subscribePush();
+    dbg("push: not available — native iOS app needed", "warn");
   } catch (e) {
     toast(e.message || "Authentication failed", "err");
   } finally {
@@ -920,20 +989,27 @@ function connectWS() {
   clearTimeout(reconnTimer);
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   ws = new WebSocket(`${proto}//${location.host}/ws?token=${encodeURIComponent(jwtToken)}`);
-  ws.onopen    = () => { wsConnected = true; updateConnDot(true); startPolling(); };
-  ws.onmessage = e => { try { dispatchMsg(JSON.parse(e.data)); } catch {} };
-  ws.onclose   = () => { wsConnected = false; updateConnDot(false); stopPolling(); reconnTimer = setTimeout(connectWS, 2500); };
+  ws.onopen    = () => { wsConnected = true; updateConnDot(true); resetE2E(); startPolling(); };
+  ws.onmessage = async e => {
+    try {
+      const raw = JSON.parse(e.data);
+      if (raw.type === "ecdh_pubkey") { await doECDH(raw.pubkey); return; }
+      if (raw.enc) { dispatchMsg(JSON.parse(await e2eDecrypt(raw.enc))); return; }
+      dispatchMsg(raw);
+    } catch (err) { dbg("ws decode: " + err.message, "warn"); }
+  };
+  ws.onclose   = () => { wsConnected = false; updateConnDot(false); stopPolling(); resetE2E(); reconnTimer = setTimeout(connectWS, 2500); };
   ws.onerror   = () => {};
 }
 
 function wsSend(type, extra = {}) {
   if (!wsConnected) return Promise.reject("not connected");
-  return new Promise(resolve => {
+  return e2eReady.then(() => new Promise(async resolve => {
     const id = nextId();
     pending.set(id, resolve);
-    ws.send(JSON.stringify({ id, type, ...extra }));
+    ws.send(JSON.stringify(await e2eEncrypt({ id, type, ...extra })));
     setTimeout(() => { pending.delete(id); resolve({ type: "timeout" }); }, 6000);
-  });
+  }));
 }
 
 function dispatchMsg(msg) {

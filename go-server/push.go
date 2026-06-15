@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -12,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -224,22 +226,30 @@ func pollMacState(sockPath string) (state string, locked, displaySleep bool) {
 		return "", false, false
 	}
 	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+	r := bufio.NewReader(conn)
+
+	// pi-agent sends its ECDH pubkey as first message; skip it (plaintext mode)
+	if _, err := r.ReadString('\n'); err != nil {
+		return "", false, false
+	}
 
 	if _, err := conn.Write([]byte(`{"id":"push-poll","type":"get_mac_state"}` + "\n")); err != nil {
 		return "", false, false
 	}
-	buf := make([]byte, 4096)
-	n, err := conn.Read(buf)
-	if err != nil || n == 0 {
+
+	line, err := r.ReadString('\n')
+	if err != nil || len(strings.TrimSpace(line)) == 0 {
 		return "", false, false
 	}
+
 	var resp struct {
 		State        string `json:"state"`
 		Locked       bool   `json:"locked"`
 		DisplaySleep bool   `json:"display_sleep"`
 	}
-	if err := json.Unmarshal(buf[:n], &resp); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimSpace(line)), &resp); err != nil {
 		return "", false, false
 	}
 	return resp.State, resp.Locked, resp.DisplaySleep

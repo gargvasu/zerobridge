@@ -4,10 +4,11 @@ use tokio::net::{UnixListener, UnixStream};
 
 use crate::bridge::mac_bridge::MacBridge;
 use crate::config::Config;
+use crate::crypto::E2ESession;
 use crate::hid::keyboard::Keyboard;
 use crate::hid::media::Media;
 use crate::hid::mouse::Mouse;
-use crate::ipc::{IpcRequest, IpcResponse};
+use crate::ipc::{EcdhInitMsg, EcdhPubkeyMsg, EncryptedMsg, IpcRequest, IpcResponse};
 use crate::serial::protocol::Request as BridgeRequest;
 
 fn socket_path() -> String {
@@ -101,6 +102,62 @@ impl Daemon {
         let mut reader = BufReader::new(reader);
         let mut line = String::new();
 
+        // ── ECDH greeting ────────────────────────────────────────────────────────
+        // Send our ephemeral P-256 public key as the very first message.
+        // The client responds with ecdh_init (browser) or a plain IPC request
+        // (go-server internal callers) — we detect which mode to use from that.
+        let (ecdh_secret, our_pubkey_b64) = E2ESession::generate();
+        let greeting = serde_json::to_string(&EcdhPubkeyMsg {
+            r#type: "ecdh_pubkey",
+            pubkey: our_pubkey_b64,
+        })
+        .unwrap()
+            + "\n";
+        writer
+            .write_all(greeting.as_bytes())
+            .await
+            .map_err(|e| format!("Write greeting: {e}"))?;
+
+        // Read the client's first message
+        line.clear();
+        match reader.read_line(&mut line).await {
+            Ok(0) | Err(_) => return Ok(()),
+            Ok(_) => {}
+        }
+        let first = line.trim();
+        if first.is_empty() {
+            return Ok(());
+        }
+
+        // Decide on mode: E2E if client sends ecdh_init, plaintext otherwise.
+        let session: Option<E2ESession> =
+            if let Ok(init) = serde_json::from_str::<EcdhInitMsg>(first) {
+                match E2ESession::from_ecdh(ecdh_secret, &init.pubkey) {
+                    Ok(s) => {
+                        eprintln!("[daemon] E2E session established");
+                        Some(s)
+                    }
+                    Err(e) => {
+                        eprintln!("[daemon] ECDH failed: {e}");
+                        return Err(e);
+                    }
+                }
+            } else {
+                // Plaintext mode — first line is a regular IPC request; handle it now.
+                eprintln!("[daemon] plaintext mode ← {first}");
+                let response = self.handle_request(first).await;
+                let json = serde_json::to_string(&response)
+                    .unwrap_or_else(|_| r#"{"type":"error","id":"?","message":"serialize failed"}"#.into())
+                    + "\n";
+                eprintln!("[daemon] plaintext → {}", json.trim());
+                writer
+                    .write_all(json.as_bytes())
+                    .await
+                    .map_err(|e| format!("Write failed: {e}"))?;
+                None
+            };
+
+        // ── Main message loop ─────────────────────────────────────────────────────
         loop {
             line.clear();
             tokio::select! {
@@ -114,16 +171,47 @@ impl Daemon {
                             let trimmed = line.trim();
                             if trimmed.is_empty() { continue; }
 
-                            eprintln!("[daemon] ← {trimmed}");
+                            // Decrypt if in E2E mode
+                            let plain = match &session {
+                                None => trimmed.to_string(),
+                                Some(s) => {
+                                    match serde_json::from_str::<EncryptedMsg>(trimmed) {
+                                        Ok(m) => match s.decrypt(&m.enc) {
+                                            Ok(p) => p,
+                                            Err(e) => {
+                                                eprintln!("[daemon] decrypt error: {e}");
+                                                continue;
+                                            }
+                                        },
+                                        Err(_) => {
+                                            eprintln!("[daemon] expected encrypted msg, got: {trimmed}");
+                                            continue;
+                                        }
+                                    }
+                                }
+                            };
 
-                            let response = self.handle_request(trimmed).await;
+                            eprintln!("[daemon] ← {plain}");
+
+                            let response = self.handle_request(&plain).await;
                             let json = serde_json::to_string(&response)
-                                .unwrap_or_else(|_| r#"{"type":"error","id":"?","message":"serialize failed"}"#.into())
-                                + "\n";
+                                .unwrap_or_else(|_| r#"{"type":"error","id":"?","message":"serialize failed"}"#.into());
 
-                            eprintln!("[daemon] → {}", json.trim());
+                            eprintln!("[daemon] → {json}");
 
-                            writer.write_all(json.as_bytes()).await
+                            // Encrypt if in E2E mode
+                            let out = match &session {
+                                None => json + "\n",
+                                Some(s) => match s.encrypt(&json) {
+                                    Ok(enc) => format!("{{\"enc\":\"{enc}\"}}\n"),
+                                    Err(e) => {
+                                        eprintln!("[daemon] encrypt error: {e}");
+                                        continue;
+                                    }
+                                },
+                            };
+
+                            writer.write_all(out.as_bytes()).await
                                 .map_err(|e| format!("Write failed: {e}"))?;
                         }
                         Err(e) => {

@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -40,6 +42,7 @@ func handleUnlock(store *Store, sockPath string) http.HandlerFunc {
 }
 
 // typePasswordViaHID sends type_text + Enter to pi-agent over the Unix socket.
+// pi-agent sends an ECDH greeting as its first message; we skip it (plaintext mode).
 func typePasswordViaHID(password, sockPath string) error {
 	conn, err := net.DialTimeout("unix", sockPath, 3*time.Second)
 	if err != nil {
@@ -48,12 +51,19 @@ func typePasswordViaHID(password, sockPath string) error {
 	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(10 * time.Second))
 
+	r := bufio.NewReader(conn)
+
+	// Skip ECDH greeting (pi-agent sends pubkey as first message)
+	if _, err := r.ReadString('\n'); err != nil {
+		return fmt.Errorf("skip greeting: %w", err)
+	}
+
 	// Type the password
 	typeCmd := fmt.Sprintf(`{"id":"unlock-1","type":"type_text","text":%s}`, jsonStr(password))
 	if _, err := fmt.Fprintf(conn, "%s\n", typeCmd); err != nil {
 		return fmt.Errorf("write type_text: %w", err)
 	}
-	if err := readOK(conn); err != nil {
+	if err := readOK(r); err != nil {
 		return fmt.Errorf("type_text: %w", err)
 	}
 
@@ -62,21 +72,20 @@ func typePasswordViaHID(password, sockPath string) error {
 	if _, err := fmt.Fprintf(conn, "%s\n", enterCmd); err != nil {
 		return fmt.Errorf("write enter: %w", err)
 	}
-	if err := readOK(conn); err != nil {
+	if err := readOK(r); err != nil {
 		return fmt.Errorf("enter: %w", err)
 	}
 
 	return nil
 }
 
-func readOK(conn net.Conn) error {
-	buf := make([]byte, 512)
-	n, err := conn.Read(buf)
+func readOK(r *bufio.Reader) error {
+	line, err := r.ReadString('\n')
 	if err != nil {
 		return err
 	}
 	var resp map[string]interface{}
-	if err := json.Unmarshal(buf[:n], &resp); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimSpace(line)), &resp); err != nil {
 		return fmt.Errorf("parse response: %w", err)
 	}
 	if t, _ := resp["type"].(string); t == "error" {

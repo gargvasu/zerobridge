@@ -3,6 +3,7 @@
 
 mod bridge;
 mod config;
+mod crypto;
 mod daemon;
 mod hid;
 mod ipc;

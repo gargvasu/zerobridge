@@ -1,5 +1,26 @@
 use serde::{Deserialize, Serialize};
 
+// ── E2E Handshake ──────────────────────────────────
+
+/// First message sent by pi-agent on every new connection.
+#[derive(Serialize)]
+pub struct EcdhPubkeyMsg {
+    pub r#type: &'static str,
+    pub pubkey: String,
+}
+
+/// Client response to initiate ECDH — contains browser's ephemeral P-256 public key.
+#[derive(Deserialize)]
+pub struct EcdhInitMsg {
+    pub pubkey: String,
+}
+
+/// Wrapper for all encrypted WS messages after ECDH completes.
+#[derive(Deserialize)]
+pub struct EncryptedMsg {
+    pub enc: String,
+}
+
 // ── Window Info ────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
