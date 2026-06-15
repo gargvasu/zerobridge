@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>ZeroBridge</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --green: #22c55e;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --blue: #3b82f6;
+    --radius: 12px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 15px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    max-width: 480px;
+    margin: 0 auto;
+    padding-bottom: env(safe-area-inset-bottom);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    gap: 10px;
+  }
+
+  .logo { font-size: 16px; font-weight: 700; flex-shrink: 0; }
+
+  .active-app {
+    font-size: 13px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    text-align: center;
+  }
+  .active-app b { color: var(--text); font-weight: 500; }
+
+  .conn-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .conn-dot.on { background: var(--green); }
+
+  /* ── Main ── */
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+    gap: 32px;
+  }
+
+  /* ── Toggle ── */
+  .toggle-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  /* Big pill toggle button */
+  #toggle {
+    position: relative;
+    width: 200px;
+    height: 80px;
+    border-radius: 40px;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    transition: border-color 0.25s, background 0.25s;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #toggle.active {
+    border-color: var(--green);
+    background: rgba(34,197,94,0.1);
+  }
+
+  /* Knob */
+  #toggle::after {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: transform 0.25s cubic-bezier(.4,0,.2,1), background 0.25s;
+  }
+  #toggle.active::after {
+    transform: translateX(120px);
+    background: var(--green);
+  }
+
+  /* OFF / ON labels */
+  #toggle .lbl-off,
+  #toggle .lbl-on {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    transition: opacity 0.2s;
+  }
+  #toggle .lbl-off { right: 18px; color: var(--muted); }
+  #toggle .lbl-on  { left: 18px;  color: var(--green); opacity: 0; }
+  #toggle.active .lbl-off { opacity: 0; }
+  #toggle.active .lbl-on  { opacity: 1; }
+
+  /* Status line under toggle */
+  .toggle-status {
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.5;
+    min-height: 40px;
+    transition: color 0.2s;
+  }
+  .toggle-status.capturing {
+    color: var(--green);
+    font-weight: 500;
+  }
+
+  /* ── Key feed (last few keystrokes) ── */
+  .key-feed {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+    min-height: 36px;
+    align-items: center;
+    max-width: 100%;
+  }
+
+  .key-chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 9px;
+    font-size: 12px;
+    font-family: "SF Mono", "Fira Code", monospace;
+    color: var(--text);
+    animation: pop 0.1s ease;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @keyframes pop {
+    0%   { transform: scale(0.8); opacity: 0.5; }
+    100% { transform: scale(1);   opacity: 1; }
+  }
+
+  /* ── Status bar ── */
+  .status-bar {
+    width: 100%;
+    display: flex;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 12px;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+
+  .si { display: flex; align-items: center; gap: 5px; }
+
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+  }
+  .dot.up   { background: var(--green); }
+  .dot.down { background: var(--red); }
+  .dot.unk  { background: var(--amber); }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 18px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 100;
+  }
+  #toast.show { opacity: 1; }
+  #toast.err  { border-color: var(--red);   color: var(--red); }
+  #toast.ok   { border-color: var(--green); color: var(--green); }
+
+  /* ── Footer ── */
+  footer {
+    text-align: center;
+    padding: 10px 18px 14px;
+    font-size: 11px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Mac state overlay ── */
+  #mac-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0,0,0,0.82);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    color: var(--text);
+  }
+  #mac-overlay.show { display: flex; }
+  #mac-overlay .ol-icon { font-size: 64px; }
+  #mac-overlay .ol-title { font-size: 20px; font-weight: 700; }
+  #mac-overlay .ol-sub   { font-size: 14px; color: var(--muted); }
+
+  /* hidden input to grab mobile keyboard */
+  #capture-input {
+    position: fixed;
+    opacity: 0;
+    pointer-events: none;
+    top: -9999px;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+  }
+</style>
+</head>
+<body>
+
+<div id="mac-overlay">
+  <div class="ol-icon" id="ol-icon">🔒</div>
+  <div class="ol-title" id="ol-title">Mac is Locked</div>
+  <div class="ol-sub">Unlock the Mac to send keystrokes</div>
+</div>
+<div id="toast"></div>
+<!-- hidden input for mobile keyboard capture -->
+<input id="capture-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+
+<header>
+  <div class="logo">ZeroBridge</div>
+  <div class="active-app" id="active-app">—</div>
+  <div class="conn-dot" id="conn-dot"></div>
+</header>
+
+<main>
+  <div class="toggle-wrap">
+    <button id="toggle" aria-label="Toggle keystroke capture" aria-pressed="false">
+      <span class="lbl-on">ON</span>
+      <span class="lbl-off">OFF</span>
+    </button>
+    <div class="toggle-status" id="toggle-status">
+      Tap to start sending keystrokes to Mac
+    </div>
+  </div>
+
+  <!-- Live key feed -->
+  <div class="key-feed" id="key-feed"></div>
+
+  <!-- Bridge status -->
+  <div class="status-bar">
+    <div class="si"><div class="dot unk" id="dot-ws"></div><span id="lbl-ws">WS</span></div>
+    <div class="si"><div class="dot unk" id="dot-usb"></div><span id="lbl-usb">SSH-USB</span></div>
+    <div class="si"><div class="dot unk" id="dot-wifi"></div><span id="lbl-wifi">SSH-WiFi</span></div>
+    <div class="si" style="margin-left:auto">
+      <div class="dot" id="dot-conn"></div>
+      <span id="lbl-conn">disconnected</span>
+    </div>
+  </div>
+</main>
+
+<footer>Pi Zero W · <span id="footer-host"></span></footer>
+
+<script>
+"use strict";
+
+// ── Config ──────────────────────────────────────────
+
+const MAX_FEED = 8;   // max key chips shown
+
+// Browser e.key → pi-agent key code
+const SPECIAL_KEYS = {
+  "Enter":      "ENTER",
+  "Backspace":  "BACKSPACE",
+  "Delete":     "DELETE",
+  "Tab":        "TAB",
+  "Escape":     "ESC",
+  "ArrowLeft":  "LEFT",
+  "ArrowRight": "RIGHT",
+  "ArrowUp":    "UP",
+  "ArrowDown":  "DOWN",
+  "Home":       "HOME",
+  "End":        "END",
+  "PageUp":     "PAGEUP",
+  "PageDown":   "PAGEDOWN",
+  "F1":"F1","F2":"F2","F3":"F3","F4":"F4",
+  "F5":"F5","F6":"F6","F7":"F7","F8":"F8",
+  "F9":"F9","F10":"F10","F11":"F11","F12":"F12",
+  " ":          "SPACE",
+};
+
+// ── State ───────────────────────────────────────────
+
+let ws          = null;
+let seq         = 0;
+let capturing   = false;
+let connected   = false;
+let keyQueue    = [];   // pending keystrokes to send
+let sending     = false;
+
+const nextId = () => String(++seq);
+
+// ── Elements ────────────────────────────────────────
+
+const connDot      = document.getElementById("conn-dot");
+const activeAppEl  = document.getElementById("active-app");
+const toggle       = document.getElementById("toggle");
+const toggleStatus = document.getElementById("toggle-status");
+const keyFeed      = document.getElementById("key-feed");
+const captureInput = document.getElementById("capture-input");
+const toast        = document.getElementById("toast");
+
+document.getElementById("footer-host").textContent = location.host;
+
+// ── Toast ────────────────────────────────────────────
+
+let toastT = null;
+function showToast(msg, type = "ok") {
+  toast.textContent = msg;
+  toast.className = "show " + type;
+  clearTimeout(toastT);
+  toastT = setTimeout(() => { toast.className = ""; }, 2500);
+}
+
+// ── WebSocket ────────────────────────────────────────
+
+function send(type, extra = {}) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return Promise.reject("not connected");
+  return new Promise((resolve) => {
+    const id = nextId();
+    pending.set(id, resolve);
+    ws.send(JSON.stringify({ id, type, ...extra }));
+    setTimeout(() => { pending.delete(id); resolve({ type: "timeout" }); }, 5000);
+  });
+}
+
+const pending = new Map();
+
+function onMessage(raw) {
+  let msg;
+  try { msg = JSON.parse(raw); } catch { return; }
+  const resolve = pending.get(msg.id);
+  if (resolve) { pending.delete(msg.id); resolve(msg); }
+}
+
+function setConnected(val) {
+  connected = val;
+  connDot.className  = "conn-dot" + (val ? " on" : "");
+  document.getElementById("dot-conn").className = "dot " + (val ? "up" : "down");
+  document.getElementById("lbl-conn").textContent = val ? "connected" : "disconnected";
+  if (!val && capturing) stopCapture();
+}
+
+let reconnTimer = null;
+function connect() {
+  clearTimeout(reconnTimer);
+  ws = new WebSocket("ws://" + location.host + "/ws");
+  ws.onopen    = () => { setConnected(true); startPolling(); };
+  ws.onmessage = (e) => onMessage(e.data);
+  ws.onclose   = () => { setConnected(false); stopPolling(); reconnTimer = setTimeout(connect, 2000); };
+  ws.onerror   = () => {};
+}
+
+// ── Polling ──────────────────────────────────────────
+
+let pollApp = null, pollStat = null, pollMacState = null;
+let macOverlay = document.getElementById("mac-overlay");
+let macBlocked = false;
+
+async function doPollApp() {
+  try {
+    const r = await send("get_active_app");
+    if (r.name) activeAppEl.innerHTML = "<b>" + esc(r.name) + "</b>";
+  } catch {}
+}
+
+function setDot(id, lbl, up, label) {
+  document.getElementById(id).className = "dot " + (up ? "up" : "down");
+  document.getElementById(lbl).textContent = label;
+}
+
+async function doPollStatus() {
+  try {
+    const r = await send("status");
+    setDot("dot-ws",   "lbl-ws",   r.ws_healthy,      "WS");
+    setDot("dot-usb",  "lbl-usb",  r.ssh_usb_healthy,  "SSH-USB");
+    setDot("dot-wifi", "lbl-wifi", r.ssh_wifi_healthy, "SSH-WiFi");
+  } catch {}
+}
+
+async function doPollMacState() {
+  try {
+    const r = await send("get_mac_state");
+    if (r.type !== "mac_state") return;
+    const blocked = r.state !== "active";
+    macBlocked = blocked;
+    if (blocked) {
+      document.getElementById("ol-icon").textContent  = r.display_sleep ? "😴" : "🔒";
+      document.getElementById("ol-title").textContent = r.display_sleep ? "Mac is Sleeping" : "Mac is Locked";
+      macOverlay.classList.add("show");
+      if (capturing) stopCapture();
+    } else {
+      macOverlay.classList.remove("show");
+    }
+  } catch {}
+}
+
+function startPolling() {
+  doPollApp(); doPollStatus(); doPollMacState();
+  pollApp      = setInterval(doPollApp,       2000);
+  pollStat     = setInterval(doPollStatus,    5000);
+  pollMacState = setInterval(doPollMacState,  4000);
+}
+
+function stopPolling() {
+  clearInterval(pollApp); clearInterval(pollStat); clearInterval(pollMacState);
+  activeAppEl.textContent = "—";
+  macOverlay.classList.remove("show");
+  macBlocked = false;
+  ["dot-ws","dot-usb","dot-wifi"].forEach(id => {
+    document.getElementById(id).className = "dot unk";
+  });
+}
+
+// ── Keystroke queue ──────────────────────────────────
+// Sends one at a time so pi-agent processes them in order
+
+async function drainQueue() {
+  if (sending) return;
+  sending = true;
+  while (keyQueue.length > 0) {
+    const payload = keyQueue.shift();
+    try { await send(payload.type, payload.extra); } catch {}
+  }
+  sending = false;
+}
+
+function enqueue(type, extra) {
+  keyQueue.push({ type, extra });
+  drainQueue();
+}
+
+// ── Key feed display ─────────────────────────────────
+
+function pushFeedChip(label) {
+  const chip = document.createElement("div");
+  chip.className = "key-chip";
+  chip.textContent = label;
+  keyFeed.appendChild(chip);
+  while (keyFeed.children.length > MAX_FEED) {
+    keyFeed.removeChild(keyFeed.firstChild);
+  }
+}
+
+// ── Capture logic ─────────────────────────────────────
+
+function handleKey(e) {
+  if (!capturing) return;
+
+  // Never intercept browser dev tools or refresh
+  if (e.key === "F5" || (e.metaKey && e.key === "r")) return;
+
+  const mods = [];
+  if (e.metaKey)  mods.push("command");
+  if (e.ctrlKey)  mods.push("control");
+  if (e.altKey)   mods.push("alt");
+  if (e.shiftKey) mods.push("shift");
+
+  const special = SPECIAL_KEYS[e.key];
+
+  if (mods.length > 0 && !e.shiftKey) {
+    // Modifier combo (Cmd+C, Ctrl+V, etc.)
+    // For shift-only combos (uppercase), fall through to type_text
+    const code = special || e.key.toUpperCase();
+    e.preventDefault();
+    enqueue("key", { code, modifiers: mods });
+    pushFeedChip(mods.join("+") + "+" + code);
+  } else if (special) {
+    e.preventDefault();
+    enqueue("key", { code: special, modifiers: [] });
+    pushFeedChip(e.key === " " ? "␣" : e.key);
+  } else if (e.key.length === 1) {
+    e.preventDefault();
+    enqueue("type_text", { text: e.key });
+    pushFeedChip(e.key);
+  }
+  // Ignore: modifier-only keys, composing keys, etc.
+}
+
+function startCapture() {
+  if (!connected) { showToast("Not connected to pi-agent", "err"); return; }
+  if (macBlocked) { showToast("Mac is locked or sleeping", "err"); return; }
+  capturing = true;
+  toggle.classList.add("active");
+  toggle.setAttribute("aria-pressed", "true");
+  toggleStatus.textContent = "Capturing — everything you type goes to Mac";
+  toggleStatus.className = "toggle-status capturing";
+  keyFeed.innerHTML = "";
+  keyQueue = [];
+
+  document.addEventListener("keydown", handleKey, true);
+
+  // Mobile: focus hidden input to summon software keyboard
+  captureInput.focus();
+  captureInput.addEventListener("input", onMobileInput);
+}
+
+function stopCapture() {
+  capturing = false;
+  toggle.classList.remove("active");
+  toggle.setAttribute("aria-pressed", "false");
+  toggleStatus.textContent = "Tap to start sending keystrokes to Mac";
+  toggleStatus.className = "toggle-status";
+
+  document.removeEventListener("keydown", handleKey, true);
+  captureInput.removeEventListener("input", onMobileInput);
+  captureInput.blur();
+}
+
+// Mobile software keyboard input fallback
+function onMobileInput(e) {
+  const val = captureInput.value;
+  if (!val) return;
+  // Send each character typed via software keyboard
+  for (const ch of val) {
+    enqueue("type_text", { text: ch });
+    pushFeedChip(ch);
+  }
+  captureInput.value = "";
+}
+
+// ── Toggle button ──────────────────────────────────
+
+toggle.addEventListener("click", () => {
+  if (capturing) stopCapture(); else startCapture();
+});
+
+// Also toggle on Space/Enter when button is focused
+toggle.addEventListener("keydown", (e) => {
+  if (e.key === " " || e.key === "Enter") {
+    e.preventDefault();
+    toggle.click();
+  }
+});
+
+// ── Helpers ────────────────────────────────────────
+
+function esc(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+// ── Boot ──────────────────────────────────────────
+
+connect();
+</script>
+</body>
+</html>

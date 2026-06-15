@@ -299,6 +299,7 @@ impl SshPool {
             Request::FocusApp { app } => {
                 format!("{bin} focus '{}'", app.replace('\'', "'\\''"))
             }
+            Request::GetMacState => format!("{bin} state"),
         }
     }
 
@@ -408,6 +409,16 @@ impl SshPool {
                 Ok(Response::FocusResult {
                     app,
                     success: v["success"].as_bool().unwrap_or(false),
+                })
+            }
+
+            Request::GetMacState => {
+                let v: serde_json::Value = serde_json::from_str(&output)
+                    .map_err(|e| format!("Parse mac_state failed: {e}"))?;
+                Ok(Response::MacState {
+                    state:         v["state"].as_str().unwrap_or("active").to_string(),
+                    locked:        v["locked"].as_bool().unwrap_or(false),
+                    display_sleep: v["display_sleep"].as_bool().unwrap_or(false),
                 })
             }
         }

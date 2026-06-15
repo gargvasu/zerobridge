@@ -151,6 +151,33 @@ func focusAppResult(_ appName: String) -> [String: Any] {
     }
 }
 
+func getMacStateResult() -> [String: Any] {
+    // Display sleep: check if the main display is off
+    let displayAsleep = CGDisplayIsAsleep(CGMainDisplayID()) != 0
+
+    // Lock state: read the current login session dictionary
+    var screenLocked = false
+    if let sessionInfo = CGSessionCopyCurrentDictionary() as? [String: Any] {
+        screenLocked = sessionInfo["CGSSessionScreenIsLocked"] as? Bool ?? false
+    }
+
+    let state: String
+    if displayAsleep {
+        state = "display_sleep"
+    } else if screenLocked {
+        state = "locked"
+    } else {
+        state = "active"
+    }
+
+    return [
+        "type":          "mac_state",
+        "state":         state,
+        "locked":        screenLocked,
+        "display_sleep": displayAsleep,
+    ]
+}
+
 func getWindowForAppResult(_ appName: String) -> [String: Any] {
     guard let windowList = CGWindowListCopyWindowInfo(
         [.optionOnScreenOnly, .excludeDesktopElements],
@@ -213,6 +240,8 @@ func handleRequest(_ json: [String: Any]) -> [String: Any] {
     case "run_command":
         let cmd = json["cmd"] as? String ?? ""
         result = runCommandResult(cmd)
+    case "get_mac_state":
+        result = getMacStateResult()
     case "ping":
         result = ["type": "pong"]
     default:
@@ -391,6 +420,7 @@ func listWindows() { jsonPrint(listWindowsResult()) }
 func runCommand(_ cmd: String) { jsonPrint(runCommandResult(cmd)) }
 func focusApp(_ appName: String) { jsonPrint(focusAppResult(appName)) }
 func getWindowForApp(_ appName: String) { jsonPrint(getWindowForAppResult(appName)) }
+func getMacState() { jsonPrint(getMacStateResult()) }
 
 // ── Main ──────────────────────────────────────────
 
@@ -407,6 +437,7 @@ guard args.count >= 2 else {
     fputs("  focus <app>         Focus an application\n", stderr)
     fputs("  window <app>        Get window info for app\n", stderr)
     fputs("  run <cmd>           Run a shell command\n", stderr)
+    fputs("  state               Get Mac state (active/locked/display_sleep)\n", stderr)
     fputs("  serve [--port N] [--bind ADDR]   Start WebSocket server\n", stderr)
     fputs("\n", stderr)
     exit(1)
@@ -433,6 +464,7 @@ case "run":
         errorPrint("run requires a command argument")
     }
     runCommand(args[2])
+case "state": getMacState()
 case "serve":
     // Parse --port and --bind flags
     var port: UInt16 = 8082

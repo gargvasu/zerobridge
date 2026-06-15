@@ -37,6 +37,7 @@ pub enum IpcRequest {
     GetWindowForApp { app: String },
     FocusApp        { app: String },
     RunCommand      { cmd: String },
+    GetMacState,
 
     // HID keyboard
     Key {
@@ -75,6 +76,7 @@ pub enum IpcResponse {
     Windows       { id: String, list: Vec<WindowInfo> },
     Window        { id: String, info: WindowInfo },
     FocusResult   { id: String, app: String, success: bool },
+    MacState      { id: String, state: String, locked: bool, display_sleep: bool },
 
     // Generic success
     Ok { id: String },

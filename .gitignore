@@ -13,22 +13,40 @@ __pycache__/
 *.pyd
 mac-agent/__pycache__/
 
-# macOS
+# OS artifacts
 .DS_Store
 ._*
+Thumbs.db
 
-# Editor
+# Editor and IDEs
 *.swp
 *.swo
 *~
 .vscode/
 .idea/
+.fleet/
+.helix/
 
-# Build outputs
+# Build and binary outputs
 dist/
 *.bin
+mac-agent/zb-agent
+go-server/go-server
+go-server/go-server-local
 
-# Logs
+# Configuration and Environment
+config/config.toml
+config.toml
+.env
+.env.*
+!.env.example
+
+# Logs and temp files
 *.log
 /tmp/
-mac-agent/zb-agent
+*.sock
+
+# LLM and Assistant folders
+.claude/
+.gemini/
+

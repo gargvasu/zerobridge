@@ -21,6 +21,7 @@ pub enum Request {
     GetWindowForApp { app: String },
     FocusApp        { app: String },
     RunCommand      { cmd: String },
+    GetMacState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,6 +35,7 @@ pub enum Response {
     Windows       { list: Vec<WindowInfo> },
     Window        { info: WindowInfo },
     FocusResult   { app: String, success: bool },
+    MacState      { state: String, locked: bool, display_sleep: bool },
     Error         { message: String },
 }
 

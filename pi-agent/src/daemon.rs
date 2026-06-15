@@ -228,6 +228,15 @@ impl Daemon {
                 }
             }
 
+            IpcRequest::GetMacState => {
+                match self.bridge.request(BridgeRequest::GetMacState).await {
+                    Ok(crate::serial::protocol::Response::MacState { state, locked, display_sleep }) =>
+                        IpcResponse::MacState { id, state, locked, display_sleep },
+                    Ok(_) => IpcResponse::error(&id, "Unexpected response"),
+                    Err(e) => IpcResponse::error(&id, &e),
+                }
+            }
+
             // ── HID Keyboard ───────────────────────
 
             IpcRequest::Key { code, modifiers } => {

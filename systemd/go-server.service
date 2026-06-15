@@ -1,0 +1,14 @@
+[Unit]
+Description=ZeroBridge Go Web Server
+After=pi-agent.service
+Requires=pi-agent.service
+
+[Service]
+Type=simple
+User={{USER}}
+ExecStart=/usr/local/bin/go-server --bind 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
