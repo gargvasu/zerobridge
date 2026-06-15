@@ -112,9 +112,10 @@ fi
 
 if [ "\$DO_SERVICES" = true ] || [ "\$DO_GO" = true ]; then
     if [ -f "\$USER_HOME/go-server.service" ]; then
-        sed "s/{{USER}}/$PI_USER/g" "\$USER_HOME/go-server.service" > /etc/systemd/system/go-server.service
+        HOSTNAME=\$(hostname)
+        sed "s/{{USER}}/$PI_USER/g; s/{{HOSTNAME}}/\$HOSTNAME/g" "\$USER_HOME/go-server.service" > /etc/systemd/system/go-server.service
         rm "\$USER_HOME/go-server.service"
-        echo "✅ go-server.service installed"
+        echo "✅ go-server.service installed (rpid=\$HOSTNAME)"
     fi
 fi
 

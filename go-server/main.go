@@ -51,6 +51,11 @@ func main() {
 		log.Fatalf("[main] webauthn init: %v", err)
 	}
 
+	if err := initPush(store); err != nil {
+		log.Fatalf("[main] push init: %v", err)
+	}
+	startMacStatePoller(*sock)
+
 	mux := http.NewServeMux()
 
 	// ── Public ─────────────────────────────────────────────────────────────
@@ -90,8 +95,13 @@ func main() {
 	mux.HandleFunc("/api/unlock",          handleUnlock(store, sockPath))
 	mux.HandleFunc("/ws",                  requireAuth(store, handleWS))
 
+	// ── Push notifications ──────────────────────────────────────────────────
+	mux.HandleFunc("/api/push/vapid-key",  handleVAPIDKey)
+	mux.HandleFunc("/api/push/subscribe",  handlePushSubscribe(store))
+
 	// ── Admin — localhost only ──────────────────────────────────────────────
-	mux.HandleFunc("/admin/setup-code", localhostOnly(handleGenerateSetupCode(store)))
+	mux.HandleFunc("/admin/setup-code",  localhostOnly(handleGenerateSetupCode(store)))
+	mux.HandleFunc("/admin/test-push",   localhostOnly(handleTestPush))
 
 	addr := fmt.Sprintf("%s:%d", *bind, *port)
 

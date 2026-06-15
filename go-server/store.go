@@ -9,8 +9,14 @@ import (
 	"sync"
 	"time"
 
+	webpush "github.com/SherClockHolmes/webpush-go"
 	"github.com/go-webauthn/webauthn/webauthn"
 )
+
+// webpushVAPID wraps the library call so store.go doesn't import push.go symbols.
+func webpushVAPID() (priv, pub string, err error) {
+	return webpush.GenerateVAPIDKeys()
+}
 
 type CredMode string
 
@@ -23,9 +29,11 @@ const (
 type storedData struct {
 	Credentials []webauthn.Credential `json:"credentials"`
 	Mode        CredMode              `json:"mode,omitempty"`
-	Blob        []byte                `json:"blob,omitempty"`      // Option A: ciphertext (server stores, cannot decrypt)
-	SplitKey    []byte                `json:"split_key,omitempty"` // Option B: AES-256 key
+	Blob        []byte                `json:"blob,omitempty"`
+	SplitKey    []byte                `json:"split_key,omitempty"`
 	JWTSecret   []byte                `json:"jwt_secret"`
+	VAPIDPub    string                `json:"vapid_pub,omitempty"`
+	VAPIDPriv   string                `json:"vapid_priv,omitempty"`
 }
 
 type Store struct {
@@ -195,6 +203,23 @@ func (s *Store) GetSplitKey() []byte {
 func (s *Store) JWTSecret() []byte {
 	s.mu.RLock(); defer s.mu.RUnlock()
 	return s.d.JWTSecret
+}
+
+// ── VAPID keys (generated once, persisted) ───────────────────────────────────
+
+func (s *Store) GetVAPIDKeys() (pub, priv string, err error) {
+	s.mu.Lock(); defer s.mu.Unlock()
+	if s.d.VAPIDPub != "" {
+		return s.d.VAPIDPub, s.d.VAPIDPriv, nil
+	}
+	// Generate fresh VAPID key pair
+	priv, pub, err = webpushVAPID()
+	if err != nil {
+		return "", "", err
+	}
+	s.d.VAPIDPub = pub
+	s.d.VAPIDPriv = priv
+	return pub, priv, s.save()
 }
 
 // ── WebAuthn user (single-user system) ──────────────────────────────────────

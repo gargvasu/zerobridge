@@ -1,4 +1,4 @@
-const CACHE = "zb-v1";
+const CACHE = "zb-v2";
 const SHELL = ["/", "/manifest.json", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", e => {
@@ -13,6 +13,30 @@ self.addEventListener("activate", e => {
     )
   );
   self.clients.claim();
+});
+
+self.addEventListener("push", e => {
+  let data = { title: "ZeroBridge", body: "" };
+  try { data = e.data.json(); } catch (_) { data.body = e.data ? e.data.text() : ""; }
+  e.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: "zb-state",       // replaces previous notification
+      renotify: true,
+    })
+  );
+});
+
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  e.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then(cs => {
+      if (cs.length > 0) { cs[0].focus(); return; }
+      clients.openWindow("/");
+    })
+  );
 });
 
 self.addEventListener("fetch", e => {

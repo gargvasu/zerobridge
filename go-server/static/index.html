@@ -246,10 +246,10 @@ input[type="password"] { letter-spacing: 3px; font-size: 20px; }
 .divider { width: 100%; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
 .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
-/* ── Debug log ───────────────────────────────────────── */
+/* ── Debug log (hidden — 5-tap version badge to reveal) ─ */
 #dbg-panel {
   position: fixed; bottom: 0; left: 0; right: 0;
-  max-height: 38vh;
+  max-height: 40vh;
   background: rgba(10,10,15,0.97);
   border-top: 1px solid var(--border);
   overflow-y: auto;
@@ -265,18 +265,17 @@ input[type="password"] { letter-spacing: 3px; font-size: 20px; }
 #dbg-panel .dl.ok    { color: #86efac; }
 #dbg-panel .dl.warn  { color: #fde68a; }
 #dbg-panel .dl.error { color: #fca5a5; }
-#dbg-toggle {
-  position: fixed; bottom: calc(var(--safe-bottom) + 10px); right: 12px;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 8px; padding: 5px 10px;
-  font-size: 11px; color: var(--muted); cursor: pointer; z-index: 600;
+#ver-badge {
+  position: fixed; bottom: calc(var(--safe-bottom) + 8px); right: 10px;
+  font-size: 10px; color: var(--border); cursor: default; z-index: 600;
+  user-select: none; -webkit-user-select: none;
 }
 </style>
 </head>
 <body>
 <div id="toast"></div>
 <div id="dbg-panel"></div>
-<button id="dbg-toggle">🪲 log</button>
+<span id="ver-badge">v1.0</span>
 <input id="capture-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
 
 <!-- ── Screen: Loading ──────────────────────────────── -->
@@ -376,11 +375,16 @@ input[type="password"] { letter-spacing: 3px; font-size: 20px; }
 <script>
 "use strict";
 
-// ── Debug log ────────────────────────────────────────────────────────────────
+// ── Debug log (hidden — tap version badge 5× to reveal) ──────────────────────
 
-const dbgPanel  = document.getElementById("dbg-panel");
-const dbgToggle = document.getElementById("dbg-toggle");
-dbgToggle.addEventListener("click", () => dbgPanel.classList.toggle("show"));
+const dbgPanel = document.getElementById("dbg-panel");
+let dbgTaps = 0, dbgTapT;
+document.getElementById("ver-badge").addEventListener("click", () => {
+  dbgTaps++;
+  clearTimeout(dbgTapT);
+  dbgTapT = setTimeout(() => { dbgTaps = 0; }, 1500);
+  if (dbgTaps >= 5) { dbgTaps = 0; dbgPanel.classList.toggle("show"); }
+});
 
 function dbg(msg, level = "info") {
   const ts = new Date().toISOString().slice(11, 23);
@@ -559,6 +563,16 @@ async function api(path, opts = {}) {
   const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
   if (jwtToken) headers["Authorization"] = "Bearer " + jwtToken;
   const res = await fetch(path, { ...opts, headers });
+  if (res.status === 401) {
+    // JWT expired — clear session and return to auth screen
+    jwtToken = "";
+    sessionStorage.removeItem("zb-token");
+    sessionStorage.removeItem("zb-prf");
+    if (ws) ws.close();
+    stopPolling();
+    show("screen-auth");
+    throw new Error("Session expired — please sign in again");
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || res.statusText);
   return body;
@@ -728,6 +742,7 @@ document.getElementById("btn-register-passkey").addEventListener("click", async 
       toast("Registered with Face ID!");
       connectWS();
       show("screen-main");
+      subscribePush();
     } else {
       toast("Registered! Signing in…");
       await doAuth();
@@ -785,6 +800,7 @@ async function doAuth() {
     toast("Signed in");
     connectWS();
     show("screen-main");
+    subscribePush();
   } catch (e) {
     toast(e.message || "Authentication failed", "err");
   } finally {
@@ -1108,6 +1124,52 @@ document.getElementById("btn-signout").addEventListener("click", () => {
   if (ws) ws.close();
   stopCapture(); stopPolling();
   show("screen-auth");
+});
+
+// ── Push notifications ────────────────────────────────────────────────────────
+
+async function subscribePush() {
+  if (!("PushManager" in window) || !("serviceWorker" in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) { await sendPushSub(existing); return; }
+
+    const vapidRes = await fetch("/api/push/vapid-key");
+    if (!vapidRes.ok) return;
+    const { public_key } = await vapidRes.json();
+
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(public_key),
+    });
+    await sendPushSub(sub);
+    dbg("push: subscribed", "ok");
+  } catch (e) {
+    dbg("push: subscribe failed: " + e.message, "warn");
+  }
+}
+
+async function sendPushSub(sub) {
+  await api("/api/push/subscribe", {
+    method: "POST",
+    body: JSON.stringify(sub.toJSON()),
+  });
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from(raw, c => c.charCodeAt(0));
+}
+
+// ── Visibility — re-poll immediately when app comes to foreground ─────────────
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && wsConnected) {
+    pollMacState();
+  }
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────

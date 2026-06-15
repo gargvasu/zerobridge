@@ -47,6 +47,16 @@ setup-code)
     fi
     ;;
 
+# ── Test push notification ────────────────────────────────────────────────────
+
+test-push)
+    info "Sending test push notification..."
+    RESULT=$(ssh "$PI_USER@$PI_HOST" \
+        "curl -sk -X POST https://localhost:$ZB_PORT/admin/test-push" 2>/dev/null)
+    echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print('✅ Sent!' if d.get('status')=='sent' else '❌ '+d.get('error','unknown'))" 2>/dev/null \
+        || fail "No subscription registered — open the PWA on your iPhone first, then run this"
+    ;;
+
 # ── Status ────────────────────────────────────────────────────────────────────
 
 status)
@@ -123,7 +133,8 @@ help|--help|-h|*)
     echo ""
     echo "Commands:"
     echo "  setup-code          Generate a 6-digit iPhone registration code (valid 5 min)"
-    echo "  deploy-go           Build go-server, copy with backup, restart, show logs"
+    echo "  deploy-go           Build go-server, copy with backup, restart, show logs
+  test-push           Send a test push notification to the registered iPhone"
     echo "  status              Show go-server + pi-agent status"
     echo "  log [service]       Tail logs (default: go-server)"
     echo "  restart [service]   Restart a service (default: go-server)"
