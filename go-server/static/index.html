@@ -2,610 +2,1105 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ZeroBridge">
+<meta name="theme-color" content="#0f1117">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
 <title>ZeroBridge</title>
 <style>
-  :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --border: #2a2d3a;
-    --text: #e2e8f0;
-    --muted: #64748b;
-    --green: #22c55e;
-    --red: #ef4444;
-    --amber: #f59e0b;
-    --blue: #3b82f6;
-    --radius: 12px;
-  }
+:root {
+  --bg:      #0f1117;
+  --surface: #1a1d27;
+  --border:  #2a2d3a;
+  --text:    #e2e8f0;
+  --muted:   #64748b;
+  --green:   #22c55e;
+  --red:     #ef4444;
+  --amber:   #f59e0b;
+  --blue:    #3b82f6;
+  --r:       14px;
+  --safe-top:    env(safe-area-inset-top,    0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    font-size: 15px;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    max-width: 480px;
-    margin: 0 auto;
-    padding-bottom: env(safe-area-inset-bottom);
-    user-select: none;
-    -webkit-user-select: none;
-  }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  font-size: 16px;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--safe-top) + 20px) 24px calc(var(--safe-bottom) + 20px);
+  user-select: none;
+  -webkit-user-select: none;
+}
 
-  /* ── Header ── */
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 18px;
-    border-bottom: 1px solid var(--border);
-    gap: 10px;
-  }
+/* ── Screens ─────────────────────────────────────────── */
+.screen {
+  display: none;
+  width: 100%;
+  max-width: 360px;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  animation: fadeIn 0.25s ease;
+}
+.screen.active { display: flex; }
 
-  .logo { font-size: 16px; font-weight: 700; flex-shrink: 0; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
-  .active-app {
-    font-size: 13px;
-    color: var(--muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex: 1;
-    text-align: center;
-  }
-  .active-app b { color: var(--text); font-weight: 500; }
+/* ── Logo ────────────────────────────────────────────── */
+.logo-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.logo-icon {
+  width: 72px; height: 72px;
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 36px;
+}
+.logo-title { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+.logo-sub   { font-size: 14px; color: var(--muted); text-align: center; line-height: 1.4; }
 
-  .conn-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--red);
-    flex-shrink: 0;
-    transition: background 0.3s;
-  }
-  .conn-dot.on { background: var(--green); }
+/* ── Card ────────────────────────────────────────────── */
+.card {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.card-label { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.4px; text-transform: uppercase; }
 
-  /* ── Main ── */
-  main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 32px 24px;
-    gap: 32px;
-  }
+/* ── Inputs ──────────────────────────────────────────── */
+input[type="text"], input[type="password"], input[type="number"] {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 17px;
+  font-family: inherit;
+  padding: 13px 14px;
+  outline: none;
+  transition: border-color 0.2s;
+  -webkit-appearance: none;
+}
+input:focus { border-color: var(--blue); }
+input[type="password"] { letter-spacing: 3px; font-size: 20px; }
 
-  /* ── Toggle ── */
-  .toggle-wrap {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 20px;
-  }
+/* OTP input */
+#setup-code {
+  text-align: center;
+  letter-spacing: 14px;
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 16px;
+}
 
-  /* Big pill toggle button */
-  #toggle {
-    position: relative;
-    width: 200px;
-    height: 80px;
-    border-radius: 40px;
-    border: 2px solid var(--border);
-    background: var(--surface);
-    cursor: pointer;
-    transition: border-color 0.25s, background 0.25s;
-    outline: none;
-    -webkit-tap-highlight-color: transparent;
-  }
+/* ── Buttons ─────────────────────────────────────────── */
+.btn {
+  width: 100%;
+  padding: 16px;
+  border-radius: 12px;
+  border: none;
+  font-size: 17px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  outline: none;
+}
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn:disabled:active { transform: none; }
 
-  #toggle.active {
-    border-color: var(--green);
-    background: rgba(34,197,94,0.1);
-  }
+.btn-primary { background: var(--blue);  color: #fff; }
+.btn-green   { background: var(--green); color: #fff; }
+.btn-surface { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+.btn-red     { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
 
-  /* Knob */
-  #toggle::after {
-    content: '';
-    position: absolute;
-    top: 8px;
-    left: 8px;
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    background: var(--muted);
-    transition: transform 0.25s cubic-bezier(.4,0,.2,1), background 0.25s;
-  }
-  #toggle.active::after {
-    transform: translateX(120px);
-    background: var(--green);
-  }
+/* ── Big unlock button ───────────────────────────────── */
+#unlock-btn {
+  width: 160px; height: 160px;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  background: var(--surface);
+  font-size: 52px;
+  cursor: pointer;
+  transition: border-color 0.25s, background 0.25s, transform 0.1s;
+  outline: none;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+#unlock-btn:active { transform: scale(0.94); }
+#unlock-btn.unlocking { border-color: var(--amber); animation: pulse 1s ease-in-out infinite; }
+#unlock-btn.success   { border-color: var(--green); background: rgba(34,197,94,0.1); }
+#unlock-btn.error-state { border-color: var(--red); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
 
-  /* OFF / ON labels */
-  #toggle .lbl-off,
-  #toggle .lbl-on {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    transition: opacity 0.2s;
-  }
-  #toggle .lbl-off { right: 18px; color: var(--muted); }
-  #toggle .lbl-on  { left: 18px;  color: var(--green); opacity: 0; }
-  #toggle.active .lbl-off { opacity: 0; }
-  #toggle.active .lbl-on  { opacity: 1; }
+/* ── Status row ──────────────────────────────────────── */
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+.dot.up   { background: var(--green); }
+.dot.down { background: var(--red); }
+.dot.unk  { background: var(--amber); }
 
-  /* Status line under toggle */
-  .toggle-status {
-    font-size: 13px;
-    color: var(--muted);
-    text-align: center;
-    line-height: 1.5;
-    min-height: 40px;
-    transition: color 0.2s;
-  }
-  .toggle-status.capturing {
-    color: var(--green);
-    font-weight: 500;
-  }
+/* ── Mac state badge ─────────────────────────────────── */
+#mac-state-badge {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  transition: all 0.3s;
+}
+#mac-state-badge.locked  { border-color: rgba(245,158,11,0.5); color: var(--amber); background: rgba(245,158,11,0.1); }
+#mac-state-badge.sleeping{ border-color: rgba(59,130,246,0.5); color: var(--blue);  background: rgba(59,130,246,0.1); }
+#mac-state-badge.active  { border-color: rgba(34,197,94,0.5);  color: var(--green); background: rgba(34,197,94,0.1); }
 
-  /* ── Key feed (last few keystrokes) ── */
-  .key-feed {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    justify-content: center;
-    min-height: 36px;
-    align-items: center;
-    max-width: 100%;
-  }
+/* ── Toast ───────────────────────────────────────────── */
+#toast {
+  position: fixed;
+  bottom: calc(var(--safe-bottom) + 28px);
+  left: 50%; transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 11px 20px;
+  font-size: 14px;
+  white-space: nowrap;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s;
+  z-index: 999;
+}
+#toast.show { opacity: 1; }
+#toast.ok  { border-color: var(--green); color: var(--green); }
+#toast.err { border-color: var(--red);   color: var(--red); }
 
-  .key-chip {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 4px 9px;
-    font-size: 12px;
-    font-family: "SF Mono", "Fira Code", monospace;
-    color: var(--text);
-    animation: pop 0.1s ease;
-    max-width: 120px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+/* ── Key toggle UI (inherited from previous PWA) ─────── */
+#toggle-wrap { display: flex; flex-direction: column; align-items: center; gap: 20px; width: 100%; }
 
-  @keyframes pop {
-    0%   { transform: scale(0.8); opacity: 0.5; }
-    100% { transform: scale(1);   opacity: 1; }
-  }
+#toggle {
+  position: relative;
+  width: 180px; height: 70px;
+  border-radius: 35px;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.25s, background 0.25s;
+  outline: none;
+}
+#toggle.active { border-color: var(--green); background: rgba(34,197,94,0.1); }
+#toggle::after {
+  content: '';
+  position: absolute; top: 7px; left: 7px;
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.25s cubic-bezier(.4,0,.2,1), background 0.25s;
+}
+#toggle.active::after { transform: translateX(108px); background: var(--green); }
+#toggle .lbl-off { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); font-size: 12px; font-weight: 700; color: var(--muted); transition: opacity 0.2s; }
+#toggle .lbl-on  { position: absolute; left:  16px; top: 50%; transform: translateY(-50%); font-size: 12px; font-weight: 700; color: var(--green); opacity: 0; transition: opacity 0.2s; }
+#toggle.active .lbl-off { opacity: 0; }
+#toggle.active .lbl-on  { opacity: 1; }
+.toggle-hint { font-size: 13px; color: var(--muted); text-align: center; }
 
-  /* ── Status bar ── */
-  .status-bar {
-    width: 100%;
-    display: flex;
-    gap: 10px;
-    padding: 10px 14px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    font-size: 12px;
-    color: var(--muted);
-    flex-wrap: wrap;
-  }
+.key-feed { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; min-height: 30px; align-items: center; }
+.key-chip {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 5px; padding: 3px 8px; font-size: 11px;
+  font-family: "SF Mono", monospace; animation: pop 0.1s ease;
+}
+@keyframes pop { from { transform: scale(0.8); opacity: 0.4; } to { transform: scale(1); opacity: 1; } }
 
-  .si { display: flex; align-items: center; gap: 5px; }
+#capture-input { position: fixed; opacity: 0; pointer-events: none; top: -9999px; left: -9999px; width: 1px; height: 1px; }
 
-  .dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--muted);
-    flex-shrink: 0;
-  }
-  .dot.up   { background: var(--green); }
-  .dot.down { background: var(--red); }
-  .dot.unk  { background: var(--amber); }
+/* ── Divider ─────────────────────────────────────────── */
+.divider { width: 100%; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
-  /* ── Toast ── */
-  #toast {
-    position: fixed;
-    bottom: 24px; left: 50%;
-    transform: translateX(-50%);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 10px 18px;
-    font-size: 13px;
-    opacity: 0;
-    transition: opacity 0.2s;
-    pointer-events: none;
-    white-space: nowrap;
-    z-index: 100;
-  }
-  #toast.show { opacity: 1; }
-  #toast.err  { border-color: var(--red);   color: var(--red); }
-  #toast.ok   { border-color: var(--green); color: var(--green); }
-
-  /* ── Footer ── */
-  footer {
-    text-align: center;
-    padding: 10px 18px 14px;
-    font-size: 11px;
-    color: var(--muted);
-    border-top: 1px solid var(--border);
-  }
-
-  /* ── Mac state overlay ── */
-  #mac-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 200;
-    background: rgba(0,0,0,0.82);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    color: var(--text);
-  }
-  #mac-overlay.show { display: flex; }
-  #mac-overlay .ol-icon { font-size: 64px; }
-  #mac-overlay .ol-title { font-size: 20px; font-weight: 700; }
-  #mac-overlay .ol-sub   { font-size: 14px; color: var(--muted); }
-
-  /* hidden input to grab mobile keyboard */
-  #capture-input {
-    position: fixed;
-    opacity: 0;
-    pointer-events: none;
-    top: -9999px;
-    left: -9999px;
-    width: 1px;
-    height: 1px;
-  }
+/* ── Debug log ───────────────────────────────────────── */
+#dbg-panel {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  max-height: 38vh;
+  background: rgba(10,10,15,0.97);
+  border-top: 1px solid var(--border);
+  overflow-y: auto;
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 11px;
+  padding: 6px 10px calc(var(--safe-bottom) + 6px);
+  z-index: 500;
+  display: none;
+}
+#dbg-panel.show { display: block; }
+#dbg-panel .dl { padding: 1px 0; white-space: pre-wrap; word-break: break-all; }
+#dbg-panel .dl.info  { color: #7dd3fc; }
+#dbg-panel .dl.ok    { color: #86efac; }
+#dbg-panel .dl.warn  { color: #fde68a; }
+#dbg-panel .dl.error { color: #fca5a5; }
+#dbg-toggle {
+  position: fixed; bottom: calc(var(--safe-bottom) + 10px); right: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 5px 10px;
+  font-size: 11px; color: var(--muted); cursor: pointer; z-index: 600;
+}
 </style>
 </head>
 <body>
-
-<div id="mac-overlay">
-  <div class="ol-icon" id="ol-icon">🔒</div>
-  <div class="ol-title" id="ol-title">Mac is Locked</div>
-  <div class="ol-sub">Unlock the Mac to send keystrokes</div>
-</div>
 <div id="toast"></div>
-<!-- hidden input for mobile keyboard capture -->
+<div id="dbg-panel"></div>
+<button id="dbg-toggle">🪲 log</button>
 <input id="capture-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
 
-<header>
-  <div class="logo">ZeroBridge</div>
-  <div class="active-app" id="active-app">—</div>
-  <div class="conn-dot" id="conn-dot"></div>
-</header>
+<!-- ── Screen: Loading ──────────────────────────────── -->
+<div class="screen active" id="screen-loading">
+  <div class="logo-wrap">
+    <div class="logo-icon">🌉</div>
+    <div class="logo-title">ZeroBridge</div>
+    <div class="logo-sub">Connecting…</div>
+  </div>
+</div>
 
-<main>
-  <div class="toggle-wrap">
+<!-- ── Screen: Setup — enter code ──────────────────── -->
+<div class="screen" id="screen-setup-code">
+  <div class="logo-wrap">
+    <div class="logo-icon">🌉</div>
+    <div class="logo-title">ZeroBridge</div>
+    <div class="logo-sub">First-time setup.<br>Run <code style="font-family:monospace;color:var(--blue)">zb-ctl setup-code</code> on your Mac to get a 6-digit code.</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Setup Code</div>
+    <input id="setup-code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="——————" autocomplete="one-time-code">
+    <button class="btn btn-primary" id="btn-verify-code">Continue</button>
+  </div>
+</div>
+
+<!-- ── Screen: Setup — set Mac password ─────────────── -->
+<div class="screen" id="screen-setup-password">
+  <div class="logo-wrap">
+    <div class="logo-icon">🔑</div>
+    <div class="logo-title">Mac Password</div>
+    <div class="logo-sub">Enter your Mac login password.<br>It will be encrypted and never stored in plaintext.</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Mac Login Password</div>
+    <input id="mac-password" type="password" placeholder="••••••••" autocomplete="current-password">
+    <button class="btn btn-primary" id="btn-register-passkey">Register with Face ID →</button>
+  </div>
+  <div class="logo-sub" style="font-size:12px">Your password is encrypted with your Face ID passkey.<br>The Pi never holds the decryption key.</div>
+</div>
+
+<!-- ── Screen: Auth ──────────────────────────────────── -->
+<div class="screen" id="screen-auth">
+  <div class="logo-wrap">
+    <div class="logo-icon">🌉</div>
+    <div class="logo-title">ZeroBridge</div>
+    <div class="logo-sub">Authenticate to unlock your Mac.</div>
+  </div>
+  <button class="btn btn-primary" id="btn-auth" style="font-size:18px;padding:20px">
+    Sign in with Face ID
+  </button>
+  <div class="status-row">
+    <div class="dot" id="dot-ws"></div>
+    <span id="lbl-conn">connecting…</span>
+  </div>
+  <button class="btn btn-surface" id="btn-reregister" style="font-size:14px;padding:12px;margin-top:4px">
+    Passkey deleted? Re-register →
+  </button>
+</div>
+
+<!-- ── Screen: Main ──────────────────────────────────── -->
+<div class="screen" id="screen-main">
+  <!-- Mac state -->
+  <div id="mac-state-badge">Checking Mac…</div>
+
+  <!-- Big unlock button -->
+  <button id="unlock-btn" aria-label="Unlock Mac">🔒</button>
+  <div id="unlock-status" style="font-size:14px;color:var(--muted);text-align:center;min-height:20px"></div>
+
+  <div class="divider">keystroke mode</div>
+
+  <!-- Toggle for keyboard passthrough -->
+  <div id="toggle-wrap">
     <button id="toggle" aria-label="Toggle keystroke capture" aria-pressed="false">
       <span class="lbl-on">ON</span>
       <span class="lbl-off">OFF</span>
     </button>
-    <div class="toggle-status" id="toggle-status">
-      Tap to start sending keystrokes to Mac
-    </div>
+    <div class="toggle-hint" id="toggle-hint">Tap to send keystrokes to Mac</div>
+    <div class="key-feed" id="key-feed"></div>
   </div>
-
-  <!-- Live key feed -->
-  <div class="key-feed" id="key-feed"></div>
 
   <!-- Bridge status -->
-  <div class="status-bar">
-    <div class="si"><div class="dot unk" id="dot-ws"></div><span id="lbl-ws">WS</span></div>
-    <div class="si"><div class="dot unk" id="dot-usb"></div><span id="lbl-usb">SSH-USB</span></div>
-    <div class="si"><div class="dot unk" id="dot-wifi"></div><span id="lbl-wifi">SSH-WiFi</span></div>
-    <div class="si" style="margin-left:auto">
-      <div class="dot" id="dot-conn"></div>
-      <span id="lbl-conn">disconnected</span>
-    </div>
+  <div class="status-row" style="gap:16px;flex-wrap:wrap;justify-content:center">
+    <div class="status-row"><div class="dot unk" id="dot-ws-main"></div><span id="lbl-ws">WS</span></div>
+    <div class="status-row"><div class="dot unk" id="dot-usb"></div><span>SSH-USB</span></div>
+    <div class="status-row"><div class="dot unk" id="dot-wifi"></div><span>SSH-WiFi</span></div>
   </div>
-</main>
 
-<footer>Pi Zero W · <span id="footer-host"></span></footer>
+  <!-- Quick actions -->
+  <div style="display:flex;gap:10px;width:100%">
+    <button class="btn btn-surface" id="btn-lock-mac" style="font-size:14px;padding:12px;flex:1">🔒 Lock Mac</button>
+    <button class="btn btn-surface" id="btn-wake-mac" style="font-size:14px;padding:12px;flex:1">☀️ Wake Mac</button>
+  </div>
+
+  <button class="btn btn-surface" id="btn-signout" style="font-size:14px;padding:12px">Sign out</button>
+</div>
 
 <script>
 "use strict";
 
-// ── Config ──────────────────────────────────────────
+// ── Debug log ────────────────────────────────────────────────────────────────
 
-const MAX_FEED = 8;   // max key chips shown
+const dbgPanel  = document.getElementById("dbg-panel");
+const dbgToggle = document.getElementById("dbg-toggle");
+dbgToggle.addEventListener("click", () => dbgPanel.classList.toggle("show"));
 
-// Browser e.key → pi-agent key code
-const SPECIAL_KEYS = {
-  "Enter":      "ENTER",
-  "Backspace":  "BACKSPACE",
-  "Delete":     "DELETE",
-  "Tab":        "TAB",
-  "Escape":     "ESC",
-  "ArrowLeft":  "LEFT",
-  "ArrowRight": "RIGHT",
-  "ArrowUp":    "UP",
-  "ArrowDown":  "DOWN",
-  "Home":       "HOME",
-  "End":        "END",
-  "PageUp":     "PAGEUP",
-  "PageDown":   "PAGEDOWN",
-  "F1":"F1","F2":"F2","F3":"F3","F4":"F4",
-  "F5":"F5","F6":"F6","F7":"F7","F8":"F8",
-  "F9":"F9","F10":"F10","F11":"F11","F12":"F12",
-  " ":          "SPACE",
-};
+function dbg(msg, level = "info") {
+  const ts = new Date().toISOString().slice(11, 23);
+  const el = document.createElement("div");
+  el.className = "dl " + level;
+  el.textContent = `[${ts}] ${msg}`;
+  dbgPanel.appendChild(el);
+  dbgPanel.scrollTop = dbgPanel.scrollHeight;
+  console.log(`[zb][${level}] ${msg}`);
+}
 
-// ── State ───────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────────
 
-let ws          = null;
-let seq         = 0;
-let capturing   = false;
-let connected   = false;
-let keyQueue    = [];   // pending keystrokes to send
-let sending     = false;
+const PRF_SALT = new TextEncoder().encode("zerobridge-mac-password-v1");
+const IDB_STORE = "zb-keys";
+const IDB_SPLIT_CIPHER_KEY = "split-ciphertext";
+
+// ── State ────────────────────────────────────────────────────────────────────
+
+let jwtToken   = sessionStorage.getItem("zb-token") || "";
+let credMode   = "";  // "prf" | "split-key"
+let ws         = null;
+let wsConnected = false;
+let capturing  = false;
+let macState   = "unknown";
+let keyQueue   = [], sending = false, seq = 0;
 
 const nextId = () => String(++seq);
 
-// ── Elements ────────────────────────────────────────
+// ── Toast ────────────────────────────────────────────────────────────────────
 
-const connDot      = document.getElementById("conn-dot");
-const activeAppEl  = document.getElementById("active-app");
-const toggle       = document.getElementById("toggle");
-const toggleStatus = document.getElementById("toggle-status");
-const keyFeed      = document.getElementById("key-feed");
-const captureInput = document.getElementById("capture-input");
-const toast        = document.getElementById("toast");
-
-document.getElementById("footer-host").textContent = location.host;
-
-// ── Toast ────────────────────────────────────────────
-
-let toastT = null;
-function showToast(msg, type = "ok") {
-  toast.textContent = msg;
-  toast.className = "show " + type;
+let toastT;
+function toast(msg, type = "ok") {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.className = "show " + type;
   clearTimeout(toastT);
-  toastT = setTimeout(() => { toast.className = ""; }, 2500);
+  toastT = setTimeout(() => el.className = "", 2800);
 }
 
-// ── WebSocket ────────────────────────────────────────
+// ── Screen routing ───────────────────────────────────────────────────────────
 
-function send(type, extra = {}) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return Promise.reject("not connected");
-  return new Promise((resolve) => {
-    const id = nextId();
-    pending.set(id, resolve);
-    ws.send(JSON.stringify({ id, type, ...extra }));
-    setTimeout(() => { pending.delete(id); resolve({ type: "timeout" }); }, 5000);
+function show(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+// ── IndexedDB (split-key ciphertext storage) ──────────────────────────────────
+
+function idbOpen() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open("zerobridge", 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(IDB_STORE);
+    req.onsuccess = e => res(e.target.result);
+    req.onerror   = e => rej(e.target.error);
+  });
+}
+async function idbSet(key, value) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).put(value, key);
+    tx.oncomplete = res; tx.onerror = e => rej(e.target.error);
+  });
+}
+async function idbGet(key) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(IDB_STORE, "readonly");
+    const req = tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess = e => res(e.target.result);
+    req.onerror   = e => rej(e.target.error);
   });
 }
 
+// ── Crypto helpers ────────────────────────────────────────────────────────────
+
+function b64ToBytes(b64) {
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+}
+function bytesToB64(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)));
+}
+function bytesToB64url(buf) {
+  return bytesToB64(buf).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+async function aesEncrypt(keyBytes, plaintext) {
+  const iv  = crypto.getRandomValues(new Uint8Array(12));
+  const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt"]);
+  const ct  = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plaintext));
+  return { iv: bytesToB64(iv), ciphertext: bytesToB64(ct) };
+}
+
+async function aesDecrypt(keyBytes, iv, ciphertextB64) {
+  const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["decrypt"]);
+  const pt  = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: b64ToBytes(iv) },
+    key,
+    b64ToBytes(ciphertextB64)
+  );
+  return new TextDecoder().decode(pt);
+}
+
+// ── WebAuthn helpers ──────────────────────────────────────────────────────────
+
+// Convert server-side base64url challenge/id fields to ArrayBuffer
+function fixCredentialOptions(obj) {
+  if (obj.publicKey) {
+    const pk = obj.publicKey;
+    if (pk.challenge)   pk.challenge   = base64urlToBuffer(pk.challenge);
+    if (pk.user?.id)    pk.user.id     = base64urlToBuffer(pk.user.id);
+    if (pk.excludeCredentials) {
+      pk.excludeCredentials = pk.excludeCredentials.map(c => ({
+        ...c, id: base64urlToBuffer(c.id)
+      }));
+    }
+    if (pk.allowCredentials) {
+      pk.allowCredentials = pk.allowCredentials.map(c => ({
+        ...c, id: base64urlToBuffer(c.id)
+      }));
+    }
+    if (pk.extensions?.prf?.eval?.first) {
+      pk.extensions.prf.eval.first = PRF_SALT;
+    }
+  }
+  return obj;
+}
+
+function base64urlToBuffer(b64url) {
+  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/').padEnd(
+    b64url.length + (4 - b64url.length % 4) % 4, '='
+  );
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer;
+}
+
+function credentialToJSON(cred) {
+  let ext = {};
+  try { ext = cred.getClientExtensionResults(); } catch (_) {}
+
+  const r = cred.response;
+  const isAttestation = typeof r.attestationObject !== 'undefined';
+
+  let response;
+  if (isAttestation) {
+    // Registration response
+    response = {
+      clientDataJSON:    bytesToB64url(r.clientDataJSON),
+      attestationObject: bytesToB64url(r.attestationObject),
+    };
+    if (r.getTransports) {
+      try { response.transports = r.getTransports(); } catch (_) {}
+    }
+  } else {
+    // Authentication response
+    response = {
+      clientDataJSON:   bytesToB64url(r.clientDataJSON),
+      authenticatorData: bytesToB64url(r.authenticatorData),
+      signature:        bytesToB64url(r.signature),
+    };
+    if (r.userHandle) response.userHandle = bytesToB64url(r.userHandle);
+  }
+
+  return {
+    id:   cred.id,
+    type: cred.type,
+    rawId: bytesToB64url(cred.rawId),
+    response,
+    clientExtensionResults: ext,
+  };
+}
+
+// ── API helpers ───────────────────────────────────────────────────────────────
+
+async function api(path, opts = {}) {
+  const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+  if (jwtToken) headers["Authorization"] = "Bearer " + jwtToken;
+  const res = await fetch(path, { ...opts, headers });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || res.statusText);
+  return body;
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
+async function boot() {
+  // Register service worker
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  }
+
+  try {
+    const info = await api("/api/credential/mode");
+    credMode = info.mode;
+
+    if (!info.registered) {
+      show("screen-setup-code");
+      return;
+    }
+
+    if (jwtToken) {
+      // Validate by trying a no-op authenticated call
+      try {
+        await api("/api/credential/mode"); // just checking auth
+        connectWS();
+        show("screen-main");
+        return;
+      } catch {
+        jwtToken = "";
+        sessionStorage.removeItem("zb-token");
+      }
+    }
+
+    show("screen-auth");
+  } catch (e) {
+    show("screen-loading");
+    document.querySelector("#screen-loading .logo-sub").textContent = "Cannot reach Pi. Is it connected?";
+  }
+}
+
+// ── Setup flow ────────────────────────────────────────────────────────────────
+
+document.getElementById("btn-verify-code").addEventListener("click", async () => {
+  const code = document.getElementById("setup-code").value.trim();
+  if (code.length !== 6) { toast("Enter the 6-digit code", "err"); return; }
+
+  const btn = document.getElementById("btn-verify-code");
+  btn.disabled = true; btn.textContent = "Checking…";
+
+  try {
+    // We validate the code implicitly via register/begin
+    // Store the code for the next step
+    sessionStorage.setItem("zb-setup-code", code);
+    show("screen-setup-password");
+  } catch (e) {
+    toast(e.message, "err");
+  } finally {
+    btn.disabled = false; btn.textContent = "Continue";
+  }
+});
+
+document.getElementById("btn-register-passkey").addEventListener("click", async () => {
+  const password = document.getElementById("mac-password").value;
+  if (!password) { toast("Enter your Mac password", "err"); return; }
+
+  const code = sessionStorage.getItem("zb-setup-code");
+  if (!code) { show("screen-setup-code"); return; }
+
+  const btn = document.getElementById("btn-register-passkey");
+  btn.disabled = true; btn.textContent = "Waiting for Face ID…";
+
+  try {
+    dbg("register/begin → sending code");
+    const creationOptions = await api("/api/register/begin", {
+      method: "POST",
+      body: JSON.stringify({ code })
+    });
+    dbg("register/begin ← got options, calling credentials.create()");
+
+    const fixedOptions = fixCredentialOptions(creationOptions);
+    dbg("extensions requested: " + JSON.stringify(fixedOptions.publicKey?.extensions));
+    let cred;
+    try {
+      cred = await navigator.credentials.create(fixedOptions);
+    } catch (e) {
+      dbg("credentials.create() threw: " + e.name + ": " + e.message, "error");
+      throw new Error("Face ID cancelled or not available: " + e.message);
+    }
+    dbg("credentials.create() returned cred id=" + cred.id);
+
+    const credJSON = credentialToJSON(cred);
+    const prfEnabled = credJSON.clientExtensionResults?.prf?.enabled === true;
+    dbg("clientExtensionResults: " + JSON.stringify(credJSON.clientExtensionResults));
+    dbg("PRF enabled: " + prfEnabled);
+    const mode = prfEnabled ? "prf" : "split-key";
+    dbg("mode → " + mode);
+
+    let splitKey = null;
+    if (!prfEnabled) {
+      dbg("generating split key (Option B)");
+      const keyBytes = crypto.getRandomValues(new Uint8Array(32));
+      const encrypted = await aesEncrypt(keyBytes, password);
+      await idbSet(IDB_SPLIT_CIPHER_KEY, JSON.stringify(encrypted));
+      splitKey = bytesToB64(keyBytes);
+      dbg("split key generated, ciphertext stored in IndexedDB");
+    }
+
+    dbg("register/finish → sending credential + mode=" + mode);
+    await api("/api/register/finish", {
+      method: "POST",
+      body: JSON.stringify({ credential: credJSON, mode, split_key: splitKey })
+    });
+    dbg("register/finish ← ok", "ok");
+
+    sessionStorage.removeItem("zb-setup-code");
+
+    if (prfEnabled) {
+      btn.textContent = "Face ID again to encrypt password…";
+      dbg("auth/begin → requesting PRF assertion");
+      const authOptions = await api("/api/auth/begin", { method: "POST" });
+      dbg("auth/begin ← got options, calling credentials.get()");
+      dbg("prf eval in options: " + JSON.stringify(authOptions.publicKey?.extensions));
+
+      let authCred;
+      try {
+        authCred = await navigator.credentials.get(fixCredentialOptions(authOptions));
+      } catch (e) {
+        dbg("credentials.get() threw: " + e.name + ": " + e.message, "error");
+        throw new Error("Face ID (2nd) failed: " + e.message);
+      }
+      dbg("credentials.get() returned");
+      const authCredJSON = credentialToJSON(authCred);
+      dbg("PRF results: " + JSON.stringify(authCredJSON.clientExtensionResults?.prf));
+
+      const prfOutput = authCredJSON.clientExtensionResults?.prf?.results?.first;
+      if (!prfOutput) {
+        dbg("PRF output missing from assertion", "warn");
+        throw new Error("PRF output missing — Safari may not support PRF. Try split-key mode.");
+      }
+
+      const keyBytes = new Uint8Array(prfOutput);
+      dbg("reg: PRF key len=" + keyBytes.length + " first4=" + Array.from(keyBytes.slice(0,4)).map(b=>b.toString(16).padStart(2,'0')).join(''));
+      const encrypted = await aesEncrypt(keyBytes, password);
+      const blob = btoa(JSON.stringify(encrypted));
+      dbg("password encrypted with PRF key");
+
+      dbg("auth/finish → validating assertion + issuing JWT");
+      const result = await api("/api/auth/finish", {
+        method: "POST",
+        body: JSON.stringify(authCredJSON)
+      });
+      dbg("auth/finish ← JWT issued, mode=" + result.mode, "ok");
+      jwtToken = result.token;
+      credMode = result.mode;
+      sessionStorage.setItem("zb-token", jwtToken);
+      sessionStorage.setItem("zb-prf", bytesToB64(keyBytes));
+
+      dbg("credential/blob → saving encrypted blob");
+      await api("/api/credential/blob", {
+        method: "POST",
+        body: JSON.stringify({ blob })
+      });
+      dbg("credential/blob ← saved", "ok");
+
+      toast("Registered with Face ID!");
+      connectWS();
+      show("screen-main");
+    } else {
+      toast("Registered! Signing in…");
+      await doAuth();
+    }
+  } catch (e) {
+    dbg("REGISTRATION ERROR: " + e.message, "error");
+    toast(e.message || "Registration failed", "err");
+    btn.disabled = false; btn.textContent = "Register with Face ID →";
+  }
+});
+
+// ── Auth flow ─────────────────────────────────────────────────────────────────
+
+document.getElementById("btn-auth").addEventListener("click", doAuth);
+
+document.getElementById("btn-reregister").addEventListener("click", () => {
+  sessionStorage.removeItem("zb-token");
+  sessionStorage.removeItem("zb-prf");
+  jwtToken = "";
+  document.querySelector("#screen-setup-code .logo-sub").innerHTML =
+    'Re-registering passkey.<br>Run <code style="font-family:monospace;color:var(--blue)">zb-ctl setup-code</code> on your Mac, then enter your Mac password again.';
+  show("screen-setup-code");
+});
+
+async function doAuth() {
+  const btn = document.getElementById("btn-auth");
+  btn.disabled = true; btn.textContent = "Waiting for Face ID…";
+
+  try {
+    const authOptions = await api("/api/auth/begin", { method: "POST" });
+    const fixedOptions = fixCredentialOptions(authOptions);
+
+    const cred = await navigator.credentials.get(fixedOptions);
+    const credJSON = credentialToJSON(cred);
+
+    // Extract PRF output if available
+    let prfOutput = null;
+    const prfResults = credJSON.clientExtensionResults?.prf?.results;
+    if (prfResults?.first) prfOutput = prfResults.first;
+
+    const result = await api("/api/auth/finish", {
+      method: "POST",
+      body: JSON.stringify(credJSON)
+    });
+
+    jwtToken = result.token;
+    credMode = result.mode;
+    sessionStorage.setItem("zb-token", jwtToken);
+
+    // If PRF mode, cache the PRF output in sessionStorage for unlock
+    if (prfOutput && credMode === "prf") {
+      sessionStorage.setItem("zb-prf", bytesToB64(prfOutput));
+    }
+
+    toast("Signed in");
+    connectWS();
+    show("screen-main");
+  } catch (e) {
+    toast(e.message || "Authentication failed", "err");
+  } finally {
+    btn.disabled = false; btn.textContent = "Sign in with Face ID";
+  }
+}
+
+// ── Unlock flow ───────────────────────────────────────────────────────────────
+
+document.getElementById("unlock-btn").addEventListener("click", doUnlock);
+
+async function doUnlock() {
+  const btn = document.getElementById("unlock-btn");
+  const statusEl = document.getElementById("unlock-status");
+
+  btn.className = "unlocking"; btn.textContent = "⏳";
+  statusEl.textContent = "Unlocking…";
+
+  try {
+    dbg("unlock: credMode=" + credMode + " prfInSession=" + !!sessionStorage.getItem("zb-prf") + " jwt=" + !!jwtToken);
+    let password;
+
+    if (credMode === "prf") {
+      let prfB64 = sessionStorage.getItem("zb-prf");
+      let keyBytes;
+
+      if (prfB64) {
+        dbg("unlock: using cached PRF key from sessionStorage");
+        keyBytes = b64ToBytes(prfB64);
+      } else {
+        dbg("unlock: no PRF key cached, triggering auth/begin for re-derive");
+        const authOptions = await api("/api/auth/begin", { method: "POST" });
+        dbg("unlock: calling credentials.get() for PRF re-derive");
+        let cred;
+        try {
+          cred = await navigator.credentials.get(fixCredentialOptions(authOptions));
+        } catch (e) {
+          dbg("credentials.get() threw: " + e.name + ": " + e.message, "error");
+          throw e;
+        }
+        const credJSON = credentialToJSON(cred);
+        const prfFirst = credJSON.clientExtensionResults?.prf?.results?.first;
+        dbg("unlock re-derive PRF results: " + JSON.stringify(credJSON.clientExtensionResults?.prf));
+        if (!prfFirst) throw new Error("PRF output unavailable — tap Sign in with Face ID first");
+        keyBytes = new Uint8Array(prfFirst);
+        sessionStorage.setItem("zb-prf", bytesToB64(keyBytes));
+
+        const result = await api("/api/auth/finish", { method: "POST", body: JSON.stringify(credJSON) });
+        jwtToken = result.token;
+        sessionStorage.setItem("zb-token", jwtToken);
+      }
+
+      dbg("unlock: key len=" + keyBytes.length + " first4=" + Array.from(keyBytes.slice(0,4)).map(b=>b.toString(16).padStart(2,'0')).join(''));
+      dbg("unlock: fetching blob from Pi");
+      const blobData = await api("/api/credential/blob");
+      dbg("unlock: blob raw len=" + blobData.blob.length);
+      let blobParsed;
+      try { blobParsed = JSON.parse(atob(blobData.blob)); } catch(e) { dbg("blob parse failed: "+e.message,"error"); throw e; }
+      dbg("unlock: blob iv_len=" + blobParsed.iv.length + " ct_len=" + blobParsed.ciphertext.length);
+      try {
+        password = await aesDecrypt(keyBytes, blobParsed.iv, blobParsed.ciphertext);
+      } catch(e) {
+        dbg("aesDecrypt failed: " + e.name + ": " + e.message, "error");
+        throw e;
+      }
+      dbg("unlock: decrypted password (len=" + password.length + ")");
+
+    } else {
+      dbg("unlock: split-key mode");
+      const keyData   = await api("/api/credential/key");
+      const keyBytes  = b64ToBytes(keyData.key);
+      const stored    = await idbGet(IDB_SPLIT_CIPHER_KEY);
+      if (!stored) throw new Error("No ciphertext in local storage — re-register");
+      const { iv, ciphertext } = JSON.parse(stored);
+      password = await aesDecrypt(keyBytes, iv, ciphertext);
+      dbg("unlock: decrypted (split-key)");
+    }
+
+    dbg("unlock: sending POST /api/unlock");
+    await api("/api/unlock", {
+      method: "POST",
+      body: JSON.stringify({ password })
+    });
+    dbg("unlock: success", "ok");
+
+    btn.className = "success"; btn.textContent = "✅";
+    statusEl.textContent = "Mac unlocked!";
+    navigator.vibrate?.([50, 30, 50]);
+    setTimeout(() => { btn.className = ""; btn.textContent = "🔒"; statusEl.textContent = ""; }, 3000);
+
+  } catch (e) {
+    btn.className = "error-state"; btn.textContent = "❌";
+    statusEl.textContent = e.message || "Failed";
+    navigator.vibrate?.(200);
+    setTimeout(() => { btn.className = ""; btn.textContent = "🔒"; statusEl.textContent = ""; }, 3000);
+  }
+}
+
+// ── WebSocket + polling ───────────────────────────────────────────────────────
+
+let reconnTimer, pollStatT, pollMacT;
 const pending = new Map();
 
-function onMessage(raw) {
-  let msg;
-  try { msg = JSON.parse(raw); } catch { return; }
-  const resolve = pending.get(msg.id);
-  if (resolve) { pending.delete(msg.id); resolve(msg); }
-}
-
-function setConnected(val) {
-  connected = val;
-  connDot.className  = "conn-dot" + (val ? " on" : "");
-  document.getElementById("dot-conn").className = "dot " + (val ? "up" : "down");
-  document.getElementById("lbl-conn").textContent = val ? "connected" : "disconnected";
-  if (!val && capturing) stopCapture();
-}
-
-let reconnTimer = null;
-function connect() {
+function connectWS() {
   clearTimeout(reconnTimer);
-  ws = new WebSocket("ws://" + location.host + "/ws");
-  ws.onopen    = () => { setConnected(true); startPolling(); };
-  ws.onmessage = (e) => onMessage(e.data);
-  ws.onclose   = () => { setConnected(false); stopPolling(); reconnTimer = setTimeout(connect, 2000); };
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  ws = new WebSocket(`${proto}//${location.host}/ws?token=${encodeURIComponent(jwtToken)}`);
+  ws.onopen    = () => { wsConnected = true; updateConnDot(true); startPolling(); };
+  ws.onmessage = e => { try { dispatchMsg(JSON.parse(e.data)); } catch {} };
+  ws.onclose   = () => { wsConnected = false; updateConnDot(false); stopPolling(); reconnTimer = setTimeout(connectWS, 2500); };
   ws.onerror   = () => {};
 }
 
-// ── Polling ──────────────────────────────────────────
+function wsSend(type, extra = {}) {
+  if (!wsConnected) return Promise.reject("not connected");
+  return new Promise(resolve => {
+    const id = nextId();
+    pending.set(id, resolve);
+    ws.send(JSON.stringify({ id, type, ...extra }));
+    setTimeout(() => { pending.delete(id); resolve({ type: "timeout" }); }, 6000);
+  });
+}
 
-let pollApp = null, pollStat = null, pollMacState = null;
-let macOverlay = document.getElementById("mac-overlay");
-let macBlocked = false;
+function dispatchMsg(msg) {
+  const r = pending.get(msg.id);
+  if (r) { pending.delete(msg.id); r(msg); }
+}
 
-async function doPollApp() {
+function updateConnDot(up) {
+  const d = document.getElementById("dot-ws-main");
+  if (d) d.className = "dot " + (up ? "up" : "down");
+  const d2 = document.getElementById("dot-ws");
+  if (d2) d2.className = "dot " + (up ? "up" : "down");
+  const l = document.getElementById("lbl-conn");
+  if (l) l.textContent = up ? "connected" : "reconnecting…";
+}
+
+function startPolling() {
+  pollStatus(); pollMacState();
+  pollStatT = setInterval(pollStatus,   5000);
+  pollMacT  = setInterval(pollMacState, 4000);
+}
+function stopPolling() {
+  clearInterval(pollStatT); clearInterval(pollMacT);
+}
+
+async function pollStatus() {
   try {
-    const r = await send("get_active_app");
-    if (r.name) activeAppEl.innerHTML = "<b>" + esc(r.name) + "</b>";
+    const r = await wsSend("status");
+    setDot("dot-ws-main", r.ws_healthy);
+    setDot("dot-usb",     r.ssh_usb_healthy);
+    setDot("dot-wifi",    r.ssh_wifi_healthy);
   } catch {}
 }
 
-function setDot(id, lbl, up, label) {
-  document.getElementById(id).className = "dot " + (up ? "up" : "down");
-  document.getElementById(lbl).textContent = label;
-}
-
-async function doPollStatus() {
+async function pollMacState() {
   try {
-    const r = await send("status");
-    setDot("dot-ws",   "lbl-ws",   r.ws_healthy,      "WS");
-    setDot("dot-usb",  "lbl-usb",  r.ssh_usb_healthy,  "SSH-USB");
-    setDot("dot-wifi", "lbl-wifi", r.ssh_wifi_healthy, "SSH-WiFi");
-  } catch {}
-}
-
-async function doPollMacState() {
-  try {
-    const r = await send("get_mac_state");
+    const r = await wsSend("get_mac_state");
     if (r.type !== "mac_state") return;
-    const blocked = r.state !== "active";
-    macBlocked = blocked;
-    if (blocked) {
-      document.getElementById("ol-icon").textContent  = r.display_sleep ? "😴" : "🔒";
-      document.getElementById("ol-title").textContent = r.display_sleep ? "Mac is Sleeping" : "Mac is Locked";
-      macOverlay.classList.add("show");
-      if (capturing) stopCapture();
+    macState = r.state;
+
+    const badge = document.getElementById("mac-state-badge");
+    const btn   = document.getElementById("unlock-btn");
+
+    if (r.display_sleep) {
+      badge.textContent = "😴  Mac is sleeping"; badge.className = "sleeping";
+      btn.textContent = "😴"; btn.disabled = true;
+      document.getElementById("unlock-status").textContent = "Mac must be awake to unlock";
+    } else if (r.locked) {
+      badge.textContent = "🔒  Mac is locked"; badge.className = "locked";
+      btn.textContent = "🔒"; btn.disabled = false;
+      document.getElementById("unlock-status").textContent = "Tap to unlock";
     } else {
-      macOverlay.classList.remove("show");
+      badge.textContent = "✅  Mac is active"; badge.className = "active";
+      btn.textContent = "🔓"; btn.disabled = false;
+      document.getElementById("unlock-status").textContent = "Mac is already unlocked";
     }
   } catch {}
 }
 
-function startPolling() {
-  doPollApp(); doPollStatus(); doPollMacState();
-  pollApp      = setInterval(doPollApp,       2000);
-  pollStat     = setInterval(doPollStatus,    5000);
-  pollMacState = setInterval(doPollMacState,  4000);
+function setDot(id, up) {
+  const el = document.getElementById(id);
+  if (el) el.className = "dot " + (up ? "up" : "down");
 }
 
-function stopPolling() {
-  clearInterval(pollApp); clearInterval(pollStat); clearInterval(pollMacState);
-  activeAppEl.textContent = "—";
-  macOverlay.classList.remove("show");
-  macBlocked = false;
-  ["dot-ws","dot-usb","dot-wifi"].forEach(id => {
-    document.getElementById(id).className = "dot unk";
-  });
-}
+// ── Keystroke capture ─────────────────────────────────────────────────────────
 
-// ── Keystroke queue ──────────────────────────────────
-// Sends one at a time so pi-agent processes them in order
-
-async function drainQueue() {
-  if (sending) return;
-  sending = true;
-  while (keyQueue.length > 0) {
-    const payload = keyQueue.shift();
-    try { await send(payload.type, payload.extra); } catch {}
-  }
-  sending = false;
-}
-
-function enqueue(type, extra) {
-  keyQueue.push({ type, extra });
-  drainQueue();
-}
-
-// ── Key feed display ─────────────────────────────────
-
-function pushFeedChip(label) {
-  const chip = document.createElement("div");
-  chip.className = "key-chip";
-  chip.textContent = label;
-  keyFeed.appendChild(chip);
-  while (keyFeed.children.length > MAX_FEED) {
-    keyFeed.removeChild(keyFeed.firstChild);
-  }
-}
-
-// ── Capture logic ─────────────────────────────────────
+const SPECIAL = {
+  Enter:"ENTER", Backspace:"BACKSPACE", Delete:"DELETE", Tab:"TAB",
+  Escape:"ESC", ArrowLeft:"LEFT", ArrowRight:"RIGHT", ArrowUp:"UP", ArrowDown:"DOWN",
+  Home:"HOME", End:"END", PageUp:"PAGEUP", PageDown:"PAGEDOWN", " ":"SPACE",
+  F1:"F1",F2:"F2",F3:"F3",F4:"F4",F5:"F5",F6:"F6",
+  F7:"F7",F8:"F8",F9:"F9",F10:"F10",F11:"F11",F12:"F12",
+};
 
 function handleKey(e) {
   if (!capturing) return;
-
-  // Never intercept browser dev tools or refresh
   if (e.key === "F5" || (e.metaKey && e.key === "r")) return;
-
   const mods = [];
   if (e.metaKey)  mods.push("command");
   if (e.ctrlKey)  mods.push("control");
   if (e.altKey)   mods.push("alt");
   if (e.shiftKey) mods.push("shift");
-
-  const special = SPECIAL_KEYS[e.key];
-
+  const special = SPECIAL[e.key];
   if (mods.length > 0 && !e.shiftKey) {
-    // Modifier combo (Cmd+C, Ctrl+V, etc.)
-    // For shift-only combos (uppercase), fall through to type_text
-    const code = special || e.key.toUpperCase();
     e.preventDefault();
-    enqueue("key", { code, modifiers: mods });
-    pushFeedChip(mods.join("+") + "+" + code);
+    enqueue("key", { code: special || e.key.toUpperCase(), modifiers: mods });
+    addChip(mods.join("+") + "+" + (special || e.key.toUpperCase()));
   } else if (special) {
     e.preventDefault();
     enqueue("key", { code: special, modifiers: [] });
-    pushFeedChip(e.key === " " ? "␣" : e.key);
+    addChip(e.key === " " ? "␣" : e.key);
   } else if (e.key.length === 1) {
     e.preventDefault();
     enqueue("type_text", { text: e.key });
-    pushFeedChip(e.key);
+    addChip(e.key);
   }
-  // Ignore: modifier-only keys, composing keys, etc.
+}
+
+async function drainQueue() {
+  if (sending) return;
+  sending = true;
+  while (keyQueue.length > 0) {
+    const p = keyQueue.shift();
+    try { await wsSend(p.type, p.extra); } catch {}
+  }
+  sending = false;
+}
+
+function enqueue(type, extra) { keyQueue.push({ type, extra }); drainQueue(); }
+
+function addChip(label) {
+  const feed = document.getElementById("key-feed");
+  const chip = document.createElement("div");
+  chip.className = "key-chip"; chip.textContent = label;
+  feed.appendChild(chip);
+  while (feed.children.length > 8) feed.removeChild(feed.firstChild);
 }
 
 function startCapture() {
-  if (!connected) { showToast("Not connected to pi-agent", "err"); return; }
-  if (macBlocked) { showToast("Mac is locked or sleeping", "err"); return; }
+  if (!wsConnected) { toast("Not connected", "err"); return; }
   capturing = true;
-  toggle.classList.add("active");
-  toggle.setAttribute("aria-pressed", "true");
-  toggleStatus.textContent = "Capturing — everything you type goes to Mac";
-  toggleStatus.className = "toggle-status capturing";
-  keyFeed.innerHTML = "";
+  document.getElementById("toggle").classList.add("active");
+  document.getElementById("toggle").setAttribute("aria-pressed", "true");
+  document.getElementById("toggle-hint").textContent = "Capturing — everything you type goes to Mac";
+  document.getElementById("key-feed").innerHTML = "";
   keyQueue = [];
-
   document.addEventListener("keydown", handleKey, true);
-
-  // Mobile: focus hidden input to summon software keyboard
-  captureInput.focus();
-  captureInput.addEventListener("input", onMobileInput);
+  document.getElementById("capture-input").focus();
+  document.getElementById("capture-input").addEventListener("input", onMobileInput);
+  navigator.vibrate?.(30);
 }
 
 function stopCapture() {
   capturing = false;
-  toggle.classList.remove("active");
-  toggle.setAttribute("aria-pressed", "false");
-  toggleStatus.textContent = "Tap to start sending keystrokes to Mac";
-  toggleStatus.className = "toggle-status";
-
+  document.getElementById("toggle").classList.remove("active");
+  document.getElementById("toggle").setAttribute("aria-pressed", "false");
+  document.getElementById("toggle-hint").textContent = "Tap to send keystrokes to Mac";
   document.removeEventListener("keydown", handleKey, true);
-  captureInput.removeEventListener("input", onMobileInput);
-  captureInput.blur();
+  document.getElementById("capture-input").removeEventListener("input", onMobileInput);
+  document.getElementById("capture-input").blur();
+  navigator.vibrate?.(20);
 }
 
-// Mobile software keyboard input fallback
-function onMobileInput(e) {
-  const val = captureInput.value;
-  if (!val) return;
-  // Send each character typed via software keyboard
-  for (const ch of val) {
-    enqueue("type_text", { text: ch });
-    pushFeedChip(ch);
-  }
-  captureInput.value = "";
+function onMobileInput() {
+  const el = document.getElementById("capture-input");
+  for (const ch of el.value) { enqueue("type_text", { text: ch }); addChip(ch); }
+  el.value = "";
 }
 
-// ── Toggle button ──────────────────────────────────
-
-toggle.addEventListener("click", () => {
+document.getElementById("toggle").addEventListener("click", () => {
   if (capturing) stopCapture(); else startCapture();
 });
 
-// Also toggle on Space/Enter when button is focused
-toggle.addEventListener("keydown", (e) => {
-  if (e.key === " " || e.key === "Enter") {
-    e.preventDefault();
-    toggle.click();
+document.getElementById("btn-lock-mac").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-lock-mac");
+  btn.disabled = true; btn.textContent = "Locking…";
+  try {
+    await wsSend("key", { code: "Q", modifiers: ["control", "command"] });
+    toast("Mac locked");
+    dbg("lock: sent Ctrl+Cmd+Q", "ok");
+  } catch(e) {
+    toast("Lock failed: " + e, "err");
+    dbg("lock error: " + e, "error");
+  } finally {
+    btn.disabled = false; btn.textContent = "🔒 Lock Mac";
   }
 });
 
-// ── Helpers ────────────────────────────────────────
+document.getElementById("btn-wake-mac").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-wake-mac");
+  btn.disabled = true; btn.textContent = "Waking…";
+  try {
+    await wsSend("mouse_move", { dx: 10, dy: 0 });
+    await wsSend("mouse_move", { dx: -10, dy: 0 });
+    toast("Wake signal sent");
+    dbg("wake: mouse nudge sent", "ok");
+  } catch(e) {
+    toast("Wake failed: " + e, "err");
+    dbg("wake error: " + e, "error");
+  } finally {
+    btn.disabled = false; btn.textContent = "☀️ Wake Mac";
+  }
+});
 
-function esc(s) {
-  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-}
+document.getElementById("btn-signout").addEventListener("click", () => {
+  jwtToken = "";
+  sessionStorage.clear();
+  if (ws) ws.close();
+  stopCapture(); stopPolling();
+  show("screen-auth");
+});
 
-// ── Boot ──────────────────────────────────────────
+// ── Start ─────────────────────────────────────────────────────────────────────
 
-connect();
+boot();
 </script>
 </body>
 </html>
