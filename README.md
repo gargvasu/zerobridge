@@ -2,62 +2,77 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: macOS + Raspberry Pi Zero](https://img.shields.io/badge/Platform-macOS%20%2B%20Pi%20Zero-blue.svg)](https://github.com/gargvasu/zerobridge)
-[![Language: Rust + Swift](https://img.shields.io/badge/Languages-Rust%20%2B%20Swift-orange.svg)](https://github.com/gargvasu/zerobridge)
+[![Language: Rust + Swift + Go](https://img.shields.io/badge/Languages-Rust%20%2B%20Swift%20%2B%20Go-orange.svg)](https://github.com/gargvasu/zerobridge)
 
 **ZeroBridge** turns a Raspberry Pi Zero (W/2W) into a hardware-level automation engine and telemetry bridge for macOS. By emulating a physical multi-device composite USB gadget, it interfaces directly at the hardware layer—providing a reliable, zero-configuration automation experience that remains unaffected by macOS GUI scripting permissions, accessibility popups, or application sandboxing constraints.
 
-Pipe simple JSON commands into a Unix socket on the Pi, and watch it move the mouse, type hotkeys, control media, or execute terminal workflows on your Mac with native hardware precision.
+Pipe JSON commands into a Unix socket on the Pi, or connect securely to the Go Web Server to type keys, move the mouse, control media, or execute terminal commands from any mobile browser (PWA) with native hardware precision.
 
 ---
 
 ## ✨ Key Features
 
 * **🔌 Single-Cable Composite USB Gadget**: Multiplexes **USB Keyboard**, **USB Mouse**, **USB Consumer (Media) Keys**, **CDC-ACM Serial**, and **CDC-ECM Ethernet** over a single standard USB OTG cable.
-* **🛡️ Sandboxing & Permission Bypass**: Since the host Mac interfaces with the Pi Zero as a native hardware USB keyboard and mouse, automation workflows run reliably without needing complex OS-level accessibility scripting permissions, API tokens, or app sandbox authorization.
+* **🛡️ Sandboxing & Permission Bypass**: Since the host Mac interfaces with the Pi Zero as a native hardware USB keyboard and mouse, automation workflows run reliably without needing complex accessibility GUI permissions, API-level scripting tokens, or app sandbox configuration changes.
+* **📱 Progressive Web App (PWA) Control**: Serves a mobile-friendly Progressive Web App (PWA) client interface directly from the Pi Zero, featuring a virtual touchpad, keyboard entry, system media keys, and live telemetry on mobile devices.
+* **🔐 Passwordless Passkey Security (WebAuthn)**: Secured by local WebAuthn credentials (TouchID / FaceID) to lock out unauthorized devices, with administrative enrollment gated by a temporary 6-digit setup code.
+* **🔑 Hardware-Level macOS Unlock**: Securely type the macOS password via simulated hardware keys to unlock the host Mac screen directly from the mobile PWA (with local decryption and safe HID transmission).
 * **⚡ Intelligent Hybrid Routing**:
   * **Sub-Millisecond WebSocket Channel**: Uses a low-overhead WebSocket protocol over USB-ethernet for lightning-fast queries (active window states, window coordinates, screen geometry).
   * **High-Frequency Serial line**: Interfaced directly at the driver level via ACM serial (`/dev/ttyGS0` ↔ `/dev/tty.usbmodem*`) for high-frequency telemetry.
   * **Robust SSH Connection Pool**: Executes complex terminal commands, exchanges clipboard buffers, and runs automation scripts on the Mac with an automated WiFi failover mechanism if USB ethernet is interrupted.
 * **🖥️ Screen-Aware Mouse Movement**: Automatically fetches macOS multi-monitor geometry and translates coordinate metrics so mouse sweeps, drag-and-drops, and clicks map correctly across different screens.
-* **🤖 Unix Socket IPC**: Control everything from a local Unix socket on the Pi (`/tmp/zerobridge.sock`) using standard JSON payloads.
+* **📁 Local Data Persistence & TLS**: Built-in TLS cert generator (`scripts/gen-certs.sh`) for `zerobridge.local`, featuring a downloadable CA certificate (`/ca.crt`) for client device installation, and persistent storage (`/etc/zerobridge/store.json`) for registered passkeys.
 
 ---
 
 ## 📐 Architecture & Routing flow
 
 ```
-                        ┌─────────────────────────┐
-                        │       macOS Host        │
-                        │  (AppKit/Quartz APIs)   │
-                        └─────────▲─────────▲─────┘
-                                  │         │
-                   (USB Serial)   │         │ (WS / SSH over CDC-ECM)
-                        ┌─────────▼─┐     ┌─▼─────────┐
-                        │zb-agent   │     │zb-agent   │
-                        │(Swift CLI)│     │(WS Server)│
-                        └─────────▲─┘     └─▲─────────┘
-                                  │         │
-  ════════════════════════════════╪═════════╪═══════════════════ USB OTG Connection
-                                  │         │
-                        ┌─────────▼─┐     ┌─▼─────────┐
-                        │/dev/ttyGS0│     │usb0 (IP)  │
-                        │(ACM Serial)     │(Ethernet) │
-                        └─────────▲─┘     └─▲─────────┘
-                                  │         │
-                              ┌───┴─────────┴───┐
-                              │    MacBridge    │
-                              │ (Hybrid Router) │
-                              └────────▲────────┘
-                                       │
-   [ Local Socket IPC ] ────────► ┌────┴────────┐
-   (/tmp/zerobridge.sock)         │  pi-agent   │
-                                  │   (Rust)    │
-                                  └────┬────────┘
-                                       │
-                   ┌───────────────────┼───────────────────┐
-                   ▼                   ▼                   ▼
-               Keyboard              Mouse               Media
-             (/dev/hidg0)        (/dev/hidg1)        (/dev/hidg2)
+                               ┌─────────────────────────┐
+                               │       macOS Host        │
+                               │  (AppKit/Quartz APIs)   │
+                               └─────────▲─────────▲─────┘
+                                         │         │
+                          (USB Serial)   │         │ (WS / SSH over CDC-ECM)
+                               ┌─────────▼─┐     ┌─▼─────────┐
+                               │zb-agent   │     │zb-agent   │
+                               │(Swift CLI)│     │(WS Server)│
+                               └─────────▲─┘     └─▲─────────┘
+                                         │         │
+         ════════════════════════════════╪═════════╪═══════════════════ USB OTG Connection
+                                         │         │
+                               ┌─────────▼─┐     ┌─▼─────────┐
+                               │/dev/ttyGS0│     │usb0 (IP)  │
+                               │(ACM Serial)     │(Ethernet) │
+                               └─────────▲─┘     └─▲─────────┘
+                                         │         │
+                                     ┌───┴─────────┴───┐
+                                     │    MacBridge    │
+                                     │ (Hybrid Router) │
+                                     └────────▲────────┘
+                                              │
+    [ Local Socket IPC ] ─┐                   │
+    (/tmp/zerobridge.sock)├──► ┌──────────────┴───┐
+                          │    │  pi-agent (Rust) │
+                          │    └────────┬─────────┘
+                          │             │
+                          │             ├──────────────────┬──────────────────┐
+                          │             ▼                  ▼                  ▼
+                          │         Keyboard             Mouse              Media
+                          │       (/dev/hidg0)       (/dev/hidg1)       (/dev/hidg2)
+                          │
+     ┌──────────────┐     │ (WS Proxy)
+     │  go-server   │◄────┘
+     │  (Go HTTPS)  │
+     └──────▲───────┘
+            │
+            │ (PWA Client over HTTPS / TLS)
+            ▼
+     ┌──────────────┐
+     │ Mobile / PWA │
+     │ (Touch/Keys) │
+     └──────────────┘
 ```
 
 ---
@@ -67,9 +82,10 @@ Pipe simple JSON commands into a Unix socket on the Pi, and watch it move the mo
 ZeroBridge is designed with safety and device boundaries in mind:
 
 * **🔌 USB-Only macOS Service Binding**: Hardens the macOS host by configuring the Swift daemon (`zb-agent serve`) to bind exclusively to the static CDC-ECM link (`169.254.206.1`). This prevents any incoming automation requests or telemetry queries from the local WiFi or external interfaces.
+* **🔐 WebAuthn & Localized Authentication**: Authentication is performed cryptographically using Passkeys (TouchID / FaceID). Credentials and cryptographic secrets are stored in a persistent local store (`/etc/zerobridge/store.json`) on the Pi, and registration is gated by a temporary 6-digit administrative setup code generated only on the local Pi or macOS host.
+* **🛡️ TLS-Encrypted Transport**: The Go Web Server runs over TLS 1.3 to secure web views and WebSocket sessions. Certificates are signed by a locally generated CA, isolating network traffic from local snooping.
 * **🔑 Pubkey-Locked Pi Zero SSH**: The Pi Zero's SSH daemon is locked down by disabling password authentication (`PasswordAuthentication no`). The system is only accessible to computers presenting authorized cryptographic SSH keys.
 * **🛡️ Local Socket Boundary**: The IPC control channel `/tmp/zerobridge.sock` is locally scoped to the Pi Zero's filesystem with Unix permissions (`0666`). It does not open external network ports, meaning remote clients cannot send automated keys or mouse actions.
-* **⚡ Zero-Trust Interface Routing**: The SSH pool ignores default WiFi/ethernet routing for primary actions, forcing traffic directly down the point-to-point physical USB tether.
 
 ---
 
@@ -99,8 +115,18 @@ To manage the macOS daemon, use the controller utility:
 ./scripts/zb-agent-ctl.sh restart
 ```
 
-### 2. Build the Pi Agent (on Mac)
-The Rust agent is cross-compiled on the Mac for the Pi Zero's ARMv6 architecture. 
+To manage the Pi Zero services directly from the Mac host, use the `zb-ctl` script:
+```bash
+# Check status of Pi services (go-server & pi-agent)
+./scripts/zb-ctl.sh status
+
+# Tail logs on the Pi Zero
+./scripts/zb-ctl.sh log go-server
+./scripts/zb-ctl.sh log pi-agent
+```
+
+### 2. Build the Pi Agent & Go Server (on Mac)
+The binaries are cross-compiled on the Mac for the Pi Zero's ARMv6 architecture. 
 
 **Pre-requisites:**
 Install the cross-compilation toolchain on macOS:
@@ -108,7 +134,7 @@ Install the cross-compilation toolchain on macOS:
 brew install messense/macos-cross-toolchains/arm-unknown-linux-gnueabihf
 ```
 
-Compile the agent:
+Compile the agent and server:
 ```bash
 ./scripts/build.sh
 ```
@@ -119,7 +145,7 @@ Copy the built binaries, configuration files, and systemd units over the USB tet
 # Copy binaries & assets to the default tether IP (169.254.206.2)
 ./scripts/deploy.sh
 
-# Swap the new binary in and restart services on the Pi Zero
+# Swap the new binaries in and restart services on the Pi Zero
 ./scripts/activate.sh
 ```
 
@@ -128,11 +154,27 @@ Copy the built binaries, configuration files, and systemd units over the USB tet
 PI_HOST=192.168.1.50 PI_USER=pi ./scripts/deploy.sh
 ```
 
+Initialize/regenerate TLS certificates on the Pi Zero:
+```bash
+# Generate CA and server keys on the Pi, then restart go-server
+./scripts/zb-ctl.sh regen-certs
+```
+
+### 4. PWA Registration & Enrollment
+1. Open your mobile browser and navigate to `https://169.254.206.2:8443` (or the IP configured on your Pi Zero).
+2. Download and install the custom root CA certificate from `https://169.254.206.2:8443/ca.crt` (on iOS, go to Settings → Profile Downloaded → Install, then Settings → About → Certificate Trust Settings → enable Full Trust for the CA).
+3. Open the web app. You will be prompted to enter an enrollment code.
+4. On your Mac, run:
+   ```bash
+   ./scripts/zb-ctl.sh setup-code
+   ```
+5. Enter the generated 6-digit code in the mobile client and complete the WebAuthn registration process using TouchID/FaceID. Your device is now authorized!
+
 ---
 
 ## 🎛️ Complete IPC API Reference
 
-ZeroBridge accepts JSON payloads over `/tmp/zerobridge.sock`. Every request must include an `"id"` correlation token (string).
+ZeroBridge accepts JSON payloads over `/tmp/zerobridge.sock` (and proxies WebSocket traffic through the Go Server `/ws` endpoint). Every request must include an `"id"` correlation token (string).
 
 ### 1. Host Telemetry & Queries
 
@@ -291,11 +333,11 @@ To customize ZeroBridge parameters, copy `config/config.toml.example` to `~/.con
 
 ```toml
 [ssh]
-user           = "vasugarg"                      # SSH user configured on the Mac host
-key            = "/home/vasugarg/.ssh/id_ed25519" # Authorized private key path on the Pi
+user           = "mac-user"                      # SSH user configured on the Mac host
+key            = "/home/pi/.ssh/id_ed25519"      # Authorized private key path on the Pi
 port           = 22                              # SSH port on the Mac
 timeout_ms     = 5000                            # Timeout threshold for commands
-zb_agent_path  = "~/bin/zb-agent"               # Path to zb-agent on the Mac (change to ~/bin/zb-agent-dev to test a dev build)
+zb_agent_path  = "~/bin/zb-agent"                # Path to zb-agent on the Mac (change to ~/bin/zb-agent-dev to test a dev build)
 
 [hosts]
 usb  = "mac.hid"                                 # Primary static IP / Domain over USB connection
@@ -327,7 +369,7 @@ timeout_ms = 2000
 
 ## 📊 Latency & Performance
 
-Measured on Pi Zero W over USB CDC-ECM tether to Mac Mini M4:
+Measured on Pi Zero W over USB CDC-ECM tether to Mac Mini:
 
 | Channel | First request | Steady state | Notes |
 |---|---|---|---|
@@ -348,7 +390,6 @@ To measure your own baseline:
 # Run on the Pi against a live daemon
 ./scripts/latency-diag.sh
 ```
-Sections covered: ICMP RTT, `nc -q1` vs `nc -q0` overhead, per-command latency, raw SSH, 10× steady-state, channel inference, concurrent vs sequential.
 
 ---
 

@@ -863,6 +863,18 @@ async function doUnlock() {
       dbg("unlock: decrypted (split-key)");
     }
 
+    // Guard: don't type password if Mac is already unlocked
+    dbg("unlock: checking mac state before typing");
+    const stateMsg = await wsSend("get_mac_state");
+    dbg("unlock: mac state=" + JSON.stringify(stateMsg));
+    if (stateMsg.type === "mac_state" && !stateMsg.locked && !stateMsg.display_sleep) {
+      btn.className = "success"; btn.textContent = "✅";
+      statusEl.textContent = "Mac is already unlocked";
+      dbg("unlock: mac already unlocked, skipping password entry", "warn");
+      setTimeout(() => { btn.className = ""; btn.textContent = "🔒"; statusEl.textContent = ""; }, 3000);
+      return;
+    }
+
     dbg("unlock: sending POST /api/unlock");
     await api("/api/unlock", {
       method: "POST",
@@ -984,8 +996,8 @@ function handleKey(e) {
   if (!capturing) return;
   if (e.key === "F5" || (e.metaKey && e.key === "r")) return;
   const mods = [];
-  if (e.metaKey)  mods.push("command");
-  if (e.ctrlKey)  mods.push("control");
+  if (e.metaKey)  mods.push("cmd");
+  if (e.ctrlKey)  mods.push("ctrl");
   if (e.altKey)   mods.push("alt");
   if (e.shiftKey) mods.push("shift");
   const special = SPECIAL[e.key];
@@ -1063,7 +1075,7 @@ document.getElementById("btn-lock-mac").addEventListener("click", async () => {
   const btn = document.getElementById("btn-lock-mac");
   btn.disabled = true; btn.textContent = "Locking…";
   try {
-    await wsSend("key", { code: "Q", modifiers: ["control", "command"] });
+    await wsSend("key", { code: "q", modifiers: ["ctrl", "cmd"] });
     toast("Mac locked");
     dbg("lock: sent Ctrl+Cmd+Q", "ok");
   } catch(e) {
@@ -1078,8 +1090,8 @@ document.getElementById("btn-wake-mac").addEventListener("click", async () => {
   const btn = document.getElementById("btn-wake-mac");
   btn.disabled = true; btn.textContent = "Waking…";
   try {
-    await wsSend("mouse_move", { dx: 10, dy: 0 });
-    await wsSend("mouse_move", { dx: -10, dy: 0 });
+    await wsSend("key", { code: "TAB", modifiers: [] });
+    await wsSend("key", { code: "TAB", modifiers: [] });
     toast("Wake signal sent");
     dbg("wake: mouse nudge sent", "ok");
   } catch(e) {
