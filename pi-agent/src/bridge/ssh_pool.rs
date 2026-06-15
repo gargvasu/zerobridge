@@ -281,22 +281,23 @@ impl SshPool {
     // ── Command mapping ────────────────────────────
 
     fn req_to_cmd(&self, req: &Request) -> String {
+        let bin = &self.config.zb_agent_path;
         match req {
-            Request::GetCursor       => "~/bin/zb-agent cursor".into(),
-            Request::GetScreens      => "~/bin/zb-agent screens".into(),
-            Request::GetClipboard    => "~/bin/zb-agent clipboard".into(),
-            Request::GetActiveApp    => "~/bin/zb-agent app".into(),
-            Request::GetWindows      => "~/bin/zb-agent windows".into(),
+            Request::GetCursor       => format!("{bin} cursor"),
+            Request::GetScreens      => format!("{bin} screens"),
+            Request::GetClipboard    => format!("{bin} clipboard"),
+            Request::GetActiveApp    => format!("{bin} app"),
+            Request::GetWindows      => format!("{bin} windows"),
 
             Request::RunCommand { cmd } => {
                 let escaped = cmd.replace('\'', "'\\''");
-                format!("~/bin/zb-agent run '{escaped}'")
+                format!("{bin} run '{escaped}'")
             }
             Request::GetWindowForApp { app } => {
-                format!("~/bin/zb-agent window '{}'", app.replace('\'', "'\\''"))
+                format!("{bin} window '{}'", app.replace('\'', "'\\''"))
             }
             Request::FocusApp { app } => {
-                format!("~/bin/zb-agent focus '{}'", app.replace('\'', "'\\''"))
+                format!("{bin} focus '{}'", app.replace('\'', "'\\''"))
             }
         }
     }

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.zerobridge.zb-agent</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/vasugarg/bin/zb-agent</string>
+        <string>serve</string>
+        <string>--port</string>
+        <string>8082</string>
+        <string>--bind</string>
+        <string>169.254.206.1</string>
+    </array>
+
+    <!-- Start automatically on login -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Restart on crash -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Log output -->
+    <key>StandardOutPath</key>
+    <string>/tmp/zb-agent.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/zb-agent.log</string>
+
+    <!-- Give Accessibility API time to initialize on login -->
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+</dict>
+</plist>

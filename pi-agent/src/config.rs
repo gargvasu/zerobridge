@@ -19,6 +19,12 @@ pub struct SshConfig {
     pub key: String,
     pub port: u16,
     pub timeout_ms: u64,
+    #[serde(default = "default_zb_agent_path")]
+    pub zb_agent_path: String,
+}
+
+fn default_zb_agent_path() -> String {
+    "~/bin/zb-agent".to_string()
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -127,10 +133,11 @@ impl Default for Config {
 
 pub const DEFAULT_CONFIG: &str = r#"
 [ssh]
-user       = "pi"
-key        = "/home/pi/.ssh/id_ed25519"
-port       = 22
-timeout_ms = 5000
+user           = "pi"
+key            = "/home/pi/.ssh/id_ed25519"
+port           = 22
+timeout_ms     = 5000
+zb_agent_path  = "~/bin/zb-agent"
 
 [hosts]
 usb  = "169.254.206.1"

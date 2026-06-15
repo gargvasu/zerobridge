@@ -27,10 +27,13 @@ echo ""
 
 info "Looking for USB CDC-ECM network service..."
 
-# macOS names the CDC-ECM gadget differently depending on Pi's g_ether/g_multi config
-SERVICE=$(networksetup -listallnetworkservices 2>/dev/null \
-    | grep -iE "gadget|rndis|ecm|usb.*eth|ethernet.*usb|usb.*lan|usb.*100|pi.*hid|pi.*combo" \
-    | head -1)
+# Try exact known name first, then fall back to pattern matching
+SERVICE=$(networksetup -listallnetworkservices 2>/dev/null | grep -x "Pi Combo HID" | head -1)
+if [ -z "$SERVICE" ]; then
+    SERVICE=$(networksetup -listallnetworkservices 2>/dev/null \
+        | grep -iE "pi.*combo|pi.*hid|gadget|rndis|ecm|usb.*eth|ethernet.*usb|usb.*100" \
+        | head -1)
+fi
 
 if [ -z "$SERVICE" ]; then
     echo ""
@@ -103,7 +106,26 @@ if [ -f "$ZB_AGENT" ]; then
     /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp "$ZB_AGENT" 2>/dev/null || true
     ok "zb-agent firewall rule set"
 else
-    info "zb-agent not found at $ZB_AGENT — run test-mac-agent.sh --install first"
+    info "zb-agent not found at $ZB_AGENT — deploy the binary first"
+fi
+
+# ── Install zb-agent launchd agent ────────────────
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PLIST_SRC="$REPO_DIR/mac-agent/com.zerobridge.zb-agent.plist"
+PLIST_DST="$HOME/Library/LaunchAgents/com.zerobridge.zb-agent.plist"
+
+if [ -f "$PLIST_SRC" ]; then
+    cp "$PLIST_SRC" "$PLIST_DST"
+    # Load (or reload if already loaded)
+    launchctl bootout "gui/$(id -u)/com.zerobridge.zb-agent" 2>/dev/null || true
+    launchctl bootstrap "gui/$(id -u)" "$PLIST_DST"
+    ok "zb-agent launchd agent installed — starts on login, restarts on crash"
+    info "Logs: /tmp/zb-agent.log"
+    info "Stop:  launchctl bootout gui/$(id -u)/com.zerobridge.zb-agent"
+    info "Start: launchctl bootstrap gui/$(id -u) $PLIST_DST"
+else
+    info "Plist not found at $PLIST_SRC — skipping launchd install"
 fi
 
 echo ""
@@ -112,8 +134,12 @@ ok "Mac setup complete"
 echo ""
 echo "  USB ethernet: $HOST_IP/$NETMASK (static, survives reboot)"
 echo "  Pi should be reachable at: 169.254.206.2"
+echo "  zb-agent: auto-starts on login (port 8082 on 169.254.206.1)"
 echo ""
 echo "  Test connectivity:"
 echo "    ssh vasugarg@169.254.206.2"
 echo "    ssh pi0.hid"
+echo "  Check zb-agent:"
+echo "    launchctl list | grep zerobridge"
+echo "    tail -f /tmp/zb-agent.log"
 echo "═══════════════════════════════════════"

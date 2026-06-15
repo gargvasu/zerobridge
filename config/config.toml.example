@@ -3,11 +3,14 @@
 
 [ssh]
 # SSH user on the Mac
-user       = "pi"
+user           = "pi"
 # Path to SSH private key on Pi Zero
-key        = "/home/pi/.ssh/id_ed25519"
-port       = 22
-timeout_ms = 5000
+key            = "/home/pi/.ssh/id_ed25519"
+port           = 22
+timeout_ms     = 5000
+# Path to zb-agent binary on the Mac (used by SSH fallback path)
+# Switch to ~/bin/zb-agent-dev to test a dev build without affecting prod
+zb_agent_path  = "~/bin/zb-agent"
 
 [hosts]
 # Mac Mini IP over USB tether (primary — fastest)
