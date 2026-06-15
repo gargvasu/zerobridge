@@ -16,7 +16,7 @@ Pipe JSON commands into a Unix socket on the Pi, or connect securely to the Go W
 * **🛡️ Sandboxing & Permission Bypass**: Since the host Mac interfaces with the Pi Zero as a native hardware USB keyboard and mouse, automation workflows run reliably without needing complex accessibility GUI permissions, API-level scripting tokens, or app sandbox configuration changes.
 * **📱 Progressive Web App (PWA) Control**: Serves a mobile-friendly Progressive Web App (PWA) client interface directly from the Pi Zero, featuring a virtual touchpad, keyboard entry, system media keys, and live telemetry on mobile devices.
 * **🔐 Passwordless Passkey Security (WebAuthn)**: Secured by local WebAuthn credentials (TouchID / FaceID) to lock out unauthorized devices, with administrative enrollment gated by a temporary 6-digit setup code.
-* **🔑 Hardware-Level macOS Unlock**: Securely type the macOS password via simulated hardware keys to unlock the host Mac screen directly from the mobile PWA (with local decryption and safe HID transmission).
+* **🔒 Remote Lock, Wake & Unlock**: Wirelessly lock, wake, and unlock the host Mac. Leverages hardware-emulated keystrokes to wake (double `TAB`) and lock (`ctrl+cmd+q` shortcut) macOS, and queries live system lock/display status (`get_mac_state`) before securely typing the password via HID.
 * **⚡ Intelligent Hybrid Routing**:
   * **Sub-Millisecond WebSocket Channel**: Uses a low-overhead WebSocket protocol over USB-ethernet for lightning-fast queries (active window states, window coordinates, screen geometry).
   * **High-Frequency Serial line**: Interfaced directly at the driver level via ACM serial (`/dev/ttyGS0` ↔ `/dev/tty.usbmodem*`) for high-frequency telemetry.
@@ -170,6 +170,15 @@ Initialize/regenerate TLS certificates on the Pi Zero:
    ```
 5. Enter the generated 6-digit code in the mobile client and complete the WebAuthn registration process using TouchID/FaceID. Your device is now authorized!
 
+### 5. Secure Lock, Wake, and Unlock Flow
+Once authorized via WebAuthn, the PWA client coordinates screen status querying and hardware key simulation to securely wake, lock, and unlock your macOS host:
+* **Wake Display**: Sends virtual double `TAB` key events via the USB HID keyboard emulator on the Pi to wake the macOS host from display sleep.
+* **Lock Screen**: Commands the hardware emulation layer to send the standard macOS lock-screen shortcut (`ctrl+cmd+q`) directly.
+* **Smart Unlock**: 
+  1. The client first queries active display power and lock status using the `get_mac_state` command.
+  2. If the Mac is already awake and unlocked, the client skips password entry to avoid typing in open fields.
+  3. If the Mac is asleep or locked, it decrypts your macOS password from local client-side storage (authorized by local Passkey validation) and POSTs to `/api/unlock`. The Go Server then sends the password via the emulated USB keyboard device followed by `ENTER`.
+
 ---
 
 ## 🎛️ Complete IPC API Reference
@@ -238,6 +247,21 @@ Retrieves the geometry coordinates of the primary window for a specific applicat
 Brings the targeted application to the front and focuses it.
 * **Request:** `{"id":"7", "type":"focus_app", "app":"Terminal"}`
 * **Response:** `{"type":"focus_result", "id":"7", "app":"Terminal", "success":true}`
+
+#### 🔒 Get Mac State (`get_mac_state`)
+Queries the display sleep and screen lock states of the host Mac.
+* **Request:** `{"id":"20", "type":"get_mac_state"}`
+* **Response:**
+  ```json
+  {
+    "type": "mac_state",
+    "id": "20",
+    "state": "active",
+    "locked": false,
+    "display_sleep": false
+  }
+  ```
+  *(Supported `"state"` values: `"active"`, `"locked"`, `"display_sleep"`)*
 
 ---
 
