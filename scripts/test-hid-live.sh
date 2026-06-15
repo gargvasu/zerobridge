@@ -33,7 +33,7 @@ visual(){ echo -e "${YELLOW}👁  $1${NC}"; }
 # ── IPC helper ────────────────────────────────────
 
 ipc() {
-    echo "$1" | nc -q1 -U "$SOCK" 2>/dev/null
+    echo "$1" | nc -q0 -U "$SOCK" 2>/dev/null
 }
 
 ipc_ok() {
@@ -98,7 +98,7 @@ fi
 hdr "2. Keyboard typing — notepad.pw"
 
 info "Opening notepad.pw in $BROWSER..."
-open_url "$BROWSER" "https://notepad.pw/zerobridge-test"
+open_url "$BROWSER" "https://www.onlinenotepad.io/"
 sleep 4
 
 ipc_ok "focus $BROWSER" "{\"id\":\"kb1\",\"type\":\"focus_app\",\"app\":\"$BROWSER\"}"

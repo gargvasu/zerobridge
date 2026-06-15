@@ -37,7 +37,7 @@ hdr()   { echo ""; echo -e "${BLUE}── $1 ───────────�
 ipc() {
     local req="$1"
     local t="${2:-3000}"
-    echo "$req" | nc -q1 -U "$SOCK" 2>/dev/null
+    echo "$req" | nc -q0 -U "$SOCK" 2>/dev/null
 }
 
 # ipc_check LABEL REQ EXPECTED_KEY

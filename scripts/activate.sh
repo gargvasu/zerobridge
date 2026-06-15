@@ -25,34 +25,24 @@ echo "  Host: $PI_USER@$PI_HOST"
 echo "═══════════════════════════════════════"
 echo ""
 
-ssh "$PI_USER@$PI_HOST" "sudo bash -s" << 'REMOTE'
+ssh "$PI_USER@$PI_HOST" "sudo bash -s" << REMOTE
 set -e
 
-[ -f ~/pi-agent-new ] || { echo "❌ ~/pi-agent-new not found — run deploy.sh first"; exit 1; }
+USER_HOME="/home/$PI_USER"
+
+[ -f "\$USER_HOME/pi-agent-new" ] || { echo "❌ \$USER_HOME/pi-agent-new not found — run deploy.sh first"; exit 1; }
 
 # Install binary
-mv ~/pi-agent-new /usr/local/bin/pi-agent
+mv "\$USER_HOME/pi-agent-new" /usr/local/bin/pi-agent
 chmod +x /usr/local/bin/pi-agent
 echo "✅ Binary installed"
 
-# Install scripts
-[ -f ~/multi-hid-setup.sh ] && {
-    mv ~/multi-hid-setup.sh /usr/local/bin/multi-hid-setup.sh
-    chmod +x /usr/local/bin/multi-hid-setup.sh
-    echo "✅ multi-hid-setup.sh installed"
-}
-
-# Install service files (patch {{USER}} placeholder)
-ZB_USER="$(logname 2>/dev/null || echo pi)"
-[ -f ~/pi-agent.service ] && {
-    sed "s/{{USER}}/$ZB_USER/g" ~/pi-agent.service > /etc/systemd/system/pi-agent.service
-    rm ~/pi-agent.service
+# Install pi-agent service file only (patch {{USER}} placeholder)
+# Never touch mac-hid-setup.service — that controls USB gadget kernel modules
+[ -f "\$USER_HOME/pi-agent.service" ] && {
+    sed "s/{{USER}}/$PI_USER/g" "\$USER_HOME/pi-agent.service" > /etc/systemd/system/pi-agent.service
+    rm "\$USER_HOME/pi-agent.service"
     echo "✅ pi-agent.service installed"
-}
-[ -f ~/mac-hid-setup.service ] && {
-    cp ~/mac-hid-setup.service /etc/systemd/system/mac-hid-setup.service
-    rm ~/mac-hid-setup.service
-    echo "✅ mac-hid-setup.service installed"
 }
 
 # /etc/hosts entry

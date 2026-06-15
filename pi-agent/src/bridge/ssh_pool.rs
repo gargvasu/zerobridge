@@ -27,8 +27,11 @@ impl client::Handler for ClientHandler {
 // ── SSH Connection ─────────────────────────────────
 
 pub struct SshConnection {
-    handle: client::Handle<ClientHandler>,
-    host:   String,
+    handle:     client::Handle<ClientHandler>,
+    host:       String,
+    shell:      Option<russh::Channel<russh::client::Msg>>,
+    seq:        u64,
+    timeout_ms: u64,
 }
 
 impl SshConnection {
@@ -56,38 +59,97 @@ impl SshConnection {
 
         eprintln!("[ssh] ✅ Connected to {host}");
 
-        Ok(SshConnection { handle, host: host.to_string() })
+        Ok(SshConnection {
+            handle,
+            host: host.to_string(),
+            shell: None,
+            seq: 0,
+            timeout_ms: config.timeout_ms,
+        })
+    }
+
+    // Open a persistent shell channel (no PTY — clean stdout, no prompts/echo).
+    async fn ensure_shell(&mut self) -> Result<(), String> {
+        if self.shell.is_some() {
+            return Ok(());
+        }
+        let ch = self.handle
+            .channel_open_session()
+            .await
+            .map_err(|e| format!("Shell channel open failed: {e}"))?;
+        ch.request_shell(true)
+            .await
+            .map_err(|e| format!("Shell request failed: {e}"))?;
+        self.shell = Some(ch);
+        eprintln!("[ssh] {} persistent shell ready", self.host);
+        Ok(())
     }
 
     pub async fn exec(&mut self, cmd: &str) -> Result<String, String> {
-        let mut channel = self.handle
-            .channel_open_session()
+        self.ensure_shell().await?;
+
+        let marker = format!("__ZB{}__", self.seq);
+        self.seq += 1;
+
+        // Wrap command: run it, then echo the unique marker so we know where output ends.
+        // 2>&1 merges stderr into stdout so we capture error messages too.
+        let wrapped = format!("{{ {cmd}; }} 2>&1; echo '{marker}'\n");
+
+        let ch = self.shell.as_mut().expect("ensure_shell guarantees Some");
+        ch.data(wrapped.as_bytes())
             .await
-            .map_err(|e| format!("Channel open failed: {e}"))?;
+            .map_err(|e| {
+                self.shell = None; // channel dead, will reopen next call
+                format!("Shell write failed: {e}")
+            })?;
 
-        channel.exec(true, cmd)
-            .await
-            .map_err(|e| format!("Exec '{cmd}' failed: {e}"))?;
+        // Read stdout until marker appears, with a hard timeout.
+        let timeout = std::time::Duration::from_millis(self.timeout_ms);
+        match tokio::time::timeout(timeout, Self::read_until_marker(
+            self.shell.as_mut().expect("still open"),
+            &marker,
+        ))
+        .await
+        {
+            Ok(Ok(output)) => Ok(output),
+            Ok(Err(e)) => {
+                self.shell = None;
+                Err(e)
+            }
+            Err(_) => {
+                eprintln!("[ssh] {} command timed out — resetting shell", self.host);
+                self.shell = None;
+                Err("SSH command timed out".to_string())
+            }
+        }
+    }
 
-        let mut output = Vec::new();
-
+    async fn read_until_marker(
+        ch: &mut russh::Channel<russh::client::Msg>,
+        marker: &str,
+    ) -> Result<String, String> {
+        let mut output = String::new();
         loop {
-            match channel.wait().await {
+            match ch.wait().await {
                 Some(russh::ChannelMsg::Data { data }) => {
-                    output.extend_from_slice(&data);
-                }
-                Some(russh::ChannelMsg::ExitStatus { exit_status }) => {
-                    if exit_status != 0 {
-                        eprintln!("[ssh] command exited with status {exit_status}");
+                    output.push_str(&String::from_utf8_lossy(&data));
+                    if let Some(pos) = output.find(marker) {
+                        output.truncate(pos);
+                        return Ok(output.trim().to_string());
                     }
-                    break;
                 }
-                None => break,
+                Some(russh::ChannelMsg::ExtendedData { data, .. }) => {
+                    // stderr on extended channel — include in output
+                    output.push_str(&String::from_utf8_lossy(&data));
+                }
+                None
+                | Some(russh::ChannelMsg::Eof)
+                | Some(russh::ChannelMsg::Close) => {
+                    return Err("Shell channel closed unexpectedly".to_string());
+                }
                 _ => {}
             }
         }
-
-        Ok(String::from_utf8_lossy(&output).trim().to_string())
     }
 }
 

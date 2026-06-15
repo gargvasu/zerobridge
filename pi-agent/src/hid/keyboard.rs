@@ -4,7 +4,7 @@ use std::io::Write;
 use tokio::time::{sleep, Duration};
 
 use crate::config::HidConfig;
-const TAP_DELAY_MS: u64 = 30;
+const TAP_DELAY_MS: u64 = 10;
 
 pub struct Keyboard {
     device: std::fs::File,
