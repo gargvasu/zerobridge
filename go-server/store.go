@@ -23,17 +23,21 @@ type CredMode string
 const (
 	ModePRF      CredMode = "prf"
 	ModeSplitKey CredMode = "split-key"
+	ModeDeviceKey CredMode = "device-key"
 	ModeNone     CredMode = ""
 )
 
 type storedData struct {
-	Credentials []webauthn.Credential `json:"credentials"`
-	Mode        CredMode              `json:"mode,omitempty"`
-	Blob        []byte                `json:"blob,omitempty"`
-	SplitKey    []byte                `json:"split_key,omitempty"`
-	JWTSecret   []byte                `json:"jwt_secret"`
-	VAPIDPub    string                `json:"vapid_pub,omitempty"`
-	VAPIDPriv   string                `json:"vapid_priv,omitempty"`
+	Credentials   []webauthn.Credential `json:"credentials"`
+	Mode          CredMode              `json:"mode,omitempty"`
+	Blob          []byte                `json:"blob,omitempty"`
+	SplitKey      []byte                `json:"split_key,omitempty"`
+	JWTSecret     []byte                `json:"jwt_secret"`
+	VAPIDPub      string                `json:"vapid_pub,omitempty"`
+	VAPIDPriv     string                `json:"vapid_priv,omitempty"`
+	DeviceSignPub []byte                `json:"device_sign_pub,omitempty"` // native app: P-256 signing pubkey (auth)
+	DeviceKAPub   []byte                `json:"device_ka_pub,omitempty"`   // native app: P-256 key-agreement pubkey (blob encryption)
+	APNSToken     string                `json:"apns_token,omitempty"`      // native app: APNs device token (hex)
 }
 
 type Store struct {
@@ -42,10 +46,12 @@ type Store struct {
 	path string
 
 	// ephemeral — never persisted
-	setupCode    string
-	setupCodeExp time.Time
-	regSession   *webauthn.SessionData
-	authSession  *webauthn.SessionData
+	setupCode         string
+	setupCodeExp      time.Time
+	regSession        *webauthn.SessionData
+	authSession       *webauthn.SessionData
+	deviceChallenge    []byte
+	deviceChallengeExp time.Time
 }
 
 func NewStore(dir string) (*Store, error) {
@@ -196,6 +202,62 @@ func (s *Store) SaveSplitKey(key []byte) error {
 func (s *Store) GetSplitKey() []byte {
 	s.mu.RLock(); defer s.mu.RUnlock()
 	return s.d.SplitKey
+}
+
+// ── Option C: native app device key (Secure Enclave, biometry-gated) ───────
+
+// SaveDeviceKeys stores the native app's device pubkeys, replacing any prior
+// credential — mirrors SaveCredential's single-active-credential semantics.
+func (s *Store) SaveDeviceKeys(signPub, kaPub []byte) error {
+	s.mu.Lock(); defer s.mu.Unlock()
+	s.d.Credentials = nil // clear any WebAuthn credential — one active credential at a time
+	s.d.Mode = ModeDeviceKey
+	s.d.DeviceSignPub = signPub
+	s.d.DeviceKAPub = kaPub
+	s.d.Blob = nil // old blob was encrypted for the replaced key — useless now
+	s.d.SplitKey = nil
+	return s.save()
+}
+
+func (s *Store) GetDeviceKeys() (signPub, kaPub []byte) {
+	s.mu.RLock(); defer s.mu.RUnlock()
+	return s.d.DeviceSignPub, s.d.DeviceKAPub
+}
+
+func (s *Store) HasDeviceKeys() bool {
+	s.mu.RLock(); defer s.mu.RUnlock()
+	return len(s.d.DeviceSignPub) > 0
+}
+
+// SetDeviceChallenge/ConsumeDeviceChallenge — short-lived nonce for the device
+// auth challenge-response, same expiring-single-use shape as the setup code.
+func (s *Store) SetDeviceChallenge(nonce []byte, ttl time.Duration) {
+	s.mu.Lock(); defer s.mu.Unlock()
+	s.deviceChallenge = nonce
+	s.deviceChallengeExp = time.Now().Add(ttl)
+}
+
+func (s *Store) ConsumeDeviceChallenge() []byte {
+	s.mu.Lock(); defer s.mu.Unlock()
+	if len(s.deviceChallenge) == 0 || time.Now().After(s.deviceChallengeExp) {
+		return nil
+	}
+	nonce := s.deviceChallenge
+	s.deviceChallenge = nil
+	return nonce
+}
+
+// ── APNs device token (native app push) ─────────────────────────────────────
+
+func (s *Store) SaveAPNSToken(token string) error {
+	s.mu.Lock(); defer s.mu.Unlock()
+	s.d.APNSToken = token
+	return s.save()
+}
+
+func (s *Store) GetAPNSToken() string {
+	s.mu.RLock(); defer s.mu.RUnlock()
+	return s.d.APNSToken
 }
 
 // ── JWT secret ──────────────────────────────────────────────────────────────
