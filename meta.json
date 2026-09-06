@@ -1,0 +1,11 @@
+{
+  "description": "Turns a Raspberry Pi Zero into a hardware-level automation and telemetry bridge for macOS, emulating a composite USB keyboard/mouse/serial/Ethernet gadget so control and automation work below the OS's scripting and accessibility permission layers.",
+  "projectType": "Systems Software",
+  "stack": ["USB HID", "WebSockets", "WebAuthn", "TLS", "P-256 ECDH", "AES-256-GCM"],
+  "highlights": [
+    "Multiplexes USB keyboard, mouse, media keys, serial, and Ethernet over a single USB OTG cable via a composite gadget",
+    "End-to-end encrypted control channel using ephemeral P-256 ECDH key exchange and AES-256-GCM, with the Go relay never seeing decrypted payloads",
+    "Passwordless WebAuthn (TouchID/FaceID) authentication with temporary setup-code enrollment",
+    "Hybrid routing: sub-millisecond WebSocket queries, high-frequency ACM serial telemetry, and an SSH pool with WiFi failover"
+  ]
+}
