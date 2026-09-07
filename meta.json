@@ -1,11 +1,24 @@
 {
-  "description": "Turns a Raspberry Pi Zero into a hardware-level automation and telemetry bridge for macOS, emulating a composite USB keyboard/mouse/serial/Ethernet gadget so control and automation work below the OS's scripting and accessibility permission layers.",
-  "projectType": "Systems Software",
-  "stack": ["USB HID", "WebSockets", "WebAuthn", "TLS", "P-256 ECDH", "AES-256-GCM"],
+  "description": "Hardware-level automation engine and telemetry bridge that turns a Raspberry Pi Zero into a composite USB gadget (Keyboard, Mouse, Media keys, Serial, and Ethernet) for macOS. By interfacing directly at the physical USB layer, it delivers sub-millisecond control, remote lock/wake/unlock, and live host telemetry completely free from macOS accessibility popups and sandbox constraints.",
+  "projectType": "Systems & Embedded Security",
+  "stack": [
+    "Rust",
+    "Swift",
+    "Go",
+    "Linux USB Gadget (ConfigFS)",
+    "USB HID",
+    "WebAuthn / Passkeys",
+    "P-256 ECDH",
+    "AES-256-GCM",
+    "WebSockets",
+    "CDC-ACM / CDC-ECM"
+  ],
   "highlights": [
-    "Multiplexes USB keyboard, mouse, media keys, serial, and Ethernet over a single USB OTG cable via a composite gadget",
-    "End-to-end encrypted control channel using ephemeral P-256 ECDH key exchange and AES-256-GCM, with the Go relay never seeing decrypted payloads",
-    "Passwordless WebAuthn (TouchID/FaceID) authentication with temporary setup-code enrollment",
-    "Hybrid routing: sub-millisecond WebSocket queries, high-frequency ACM serial telemetry, and an SSH pool with WiFi failover"
+    "Single-Cable 5-in-1 Composite Gadget: Multiplexes physical USB keyboard, mouse, media keys, CDC-ACM serial, and CDC-ECM Ethernet over a standard USB OTG connection",
+    "Hardware-Level OS Sandbox Bypass: Controls macOS below GUI scripting and accessibility permission layers by interfacing as native plug-and-play USB hardware",
+    "Zero-Knowledge E2EE Architecture: Secures control and telemetry via ephemeral P-256 ECDH key exchange and AES-256-GCM encryption, keeping the Go relay completely blind to payloads",
+    "Biometric Passkey Authentication: Enforces passwordless WebAuthn (Touch ID / Face ID) access control gated by temporary 6-digit setup-code enrollment",
+    "Intelligent Tri-Channel Routing: Combines sub-millisecond WebSockets for window/screen geometry, high-frequency ACM serial for telemetry, and an SSH connection pool with automatic Wi-Fi failover"
   ]
 }
+
